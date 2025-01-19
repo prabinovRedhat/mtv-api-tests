@@ -644,7 +644,7 @@ def storage_migration_map_source_non_admin(
 
 @pytest.fixture(scope="session")
 def plans_scale(source_provider):
-    source_vms = source_provider.vms(search=py_config["vm_name_search_pattern"])
+    source_vms = source_provider.vms(query=py_config["vm_name_search_pattern"])
     plans: list[dict[str, Any]] = [
         {
             "virtual_machines": [],

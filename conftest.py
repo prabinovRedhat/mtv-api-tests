@@ -314,6 +314,8 @@ def precopy_interval_forkliftcontroller(ocp_admin_client, mtv_namespace):
 
 @pytest.fixture(scope="session")
 def destination_provider(ocp_admin_client, mtv_namespace):
+    print(f"DEBUG ==> py_config.get(\"destination_provider_name\", \"host_list\") is: {py_config.get('destination_provider_name', 'host_list')}")
+    print(f"DEBUG ==> py_config.get(\"destination_provider_name\", \"host\") is: {py_config.get('destination_provider_name', 'host')}")
     provider = Provider(
         name=py_config.get("destination_provider_name", "host"), namespace=mtv_namespace, client=ocp_admin_client
     )

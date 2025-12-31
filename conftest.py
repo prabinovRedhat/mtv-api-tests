@@ -25,7 +25,7 @@ from ocp_resources.storage_profile import StorageProfile
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
-from timeout_sampler import TimeoutSampler
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import (
     ForkliftPodsNotRunningError,
@@ -540,7 +540,24 @@ def multus_network_name(
     LOGGER.info(f"Found VMs from test config: {vms}")
 
     # Get network count directly from source provider inventory
-    networks = source_provider_inventory.vms_networks_mappings(vms=vms)
+    # Use TimeoutSampler to retry in case the inventory is not fully synced yet
+    # This can happen right after provider creation/update
+    networks = None
+    try:
+        for sample in TimeoutSampler(
+            wait_timeout=120,
+            sleep=5,
+            func=lambda: source_provider_inventory.vms_networks_mappings(vms=vms),
+            exceptions_dict={Exception: []},  # Catch all exceptions and retry
+        ):
+            if sample:
+                networks = sample
+                break
+    except TimeoutExpiredError:
+        raise TimeoutExpiredError(
+            f"Failed to get network mappings for VMs {vms} after 120 seconds. "
+            "The forklift inventory may not be fully synced yet."
+        )
 
     if not networks:
         raise ValueError(f"No networks found for VMs {vms}. VMs must have at least one network interface.")

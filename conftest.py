@@ -542,20 +542,38 @@ def multus_network_name(
     # Get network count directly from source provider inventory
     # Use TimeoutSampler to retry in case the inventory is not fully synced yet
     # This can happen right after provider creation/update
+    LOGGER.info(f"Querying forklift inventory for network mappings of VMs: {vms}")
+    LOGGER.info("Note: Inventory may take time to sync after provider creation/update - will retry for up to 120s")
+
     networks = None
+    attempt = 0
+
+    def _get_networks_with_logging():
+        nonlocal attempt
+        attempt += 1
+        try:
+            result = source_provider_inventory.vms_networks_mappings(vms=vms)
+            return result
+        except Exception as e:
+            LOGGER.debug(f"Attempt {attempt}: Inventory query failed ({e.__class__.__name__}), will retry...")
+            raise
+
     try:
         for sample in TimeoutSampler(
             wait_timeout=120,
             sleep=5,
-            func=lambda: source_provider_inventory.vms_networks_mappings(vms=vms),
+            func=_get_networks_with_logging,
             exceptions_dict={Exception: []},  # Catch all exceptions and retry
         ):
             if sample:
                 networks = sample
+                LOGGER.info(
+                    f"✓ Successfully retrieved {len(networks)} network mapping(s) from inventory (took {attempt} attempt(s))"
+                )
                 break
     except TimeoutExpiredError:
         raise TimeoutExpiredError(
-            f"Failed to get network mappings for VMs {vms} after 120 seconds. "
+            f"Failed to get network mappings for VMs {vms} after 120 seconds and {attempt} attempts. "
             "The forklift inventory may not be fully synced yet."
         )
 

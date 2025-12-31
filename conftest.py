@@ -504,7 +504,13 @@ def source_provider(
 
 @pytest.fixture(scope="function")
 def multus_network_name(
-    fixture_store, target_namespace, ocp_admin_client, multus_cni_config, source_provider_inventory, request
+    fixture_store,
+    target_namespace,
+    ocp_admin_client,
+    multus_cni_config,
+    source_provider_inventory,
+    source_provider,
+    request,
 ):
     """
     Create NADs based on network requirements with unique names per test.
@@ -538,6 +544,20 @@ def multus_network_name(
     # Get VM names from the test configuration (same way as plan fixture)
     vms = [vm["name"] for vm in test_config["virtual_machines"]]
     LOGGER.info(f"Found VMs from test config: {vms}")
+
+    # Apply default_vm_name override from provider config (same as plan fixture)
+    # This ensures we query the correct VM name from inventory
+    if hasattr(source_provider, "copyoffload_config") and source_provider.copyoffload_config:
+        default_vm_override = source_provider.copyoffload_config.get("default_vm_name")
+        if default_vm_override:
+            # Apply override to VMs that will be cloned
+            for i, vm in enumerate(test_config["virtual_machines"]):
+                if vm.get("clone", False):  # Only override for cloned VMs
+                    original_name = vms[i]
+                    vms[i] = default_vm_override
+                    LOGGER.info(
+                        f"Overriding VM name '{original_name}' with '{default_vm_override}' from provider config"
+                    )
 
     # Get network count directly from source provider inventory
     # Use TimeoutSampler to retry in case the inventory is not fully synced yet

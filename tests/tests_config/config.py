@@ -142,7 +142,7 @@ tests_params: dict = {
                 "guest_agent": True,
                 "clone": True,
                 "disk_type": "thin",
-                "snapshots": 2,
+                "snapshots": 2,  # Number of snapshots to create on the source VM before migration
             },
         ],
         "warm_migration": False,

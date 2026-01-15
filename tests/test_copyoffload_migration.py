@@ -209,6 +209,8 @@ def test_copyoffload_thin_snapshots_migration(
     XCOPY capabilities (copy-offload). Snapshots introduce extra disk chain metadata,
     so this ensures the migration succeeds when snapshots exist on the source VM.
 
+    Snapshot count is controlled by the test config (`tests/tests_config/config.py`) via `snapshots` (default: 2).
+
     Test Workflow:
     1. Powers on the source VM (if needed)
     2. Creates N snapshots on the source VM

@@ -1133,6 +1133,114 @@ def test_copyoffload_independent_persistent_disk_migration(
 
 
 @pytest.mark.copyoffload
+@pytest.mark.parametrize(
+    "plan,multus_network_name",
+    [
+        pytest.param(
+            py_config["tests_params"]["test_copyoffload_independent_nonpersistent_disk_migration"],
+            py_config["tests_params"]["test_copyoffload_independent_nonpersistent_disk_migration"],
+        )
+    ],
+    indirect=True,
+    ids=["copyoffload-independent-nonpersistent"],
+)
+def test_copyoffload_independent_nonpersistent_disk_migration(
+    request,
+    fixture_store,
+    ocp_admin_client,
+    target_namespace,
+    destination_provider,
+    plan,
+    source_provider,
+    source_provider_data,
+    multus_network_name,
+    source_provider_inventory,
+    source_vms_namespace,
+    copyoffload_config,
+    copyoffload_storage_secret,
+    vm_ssh_connections,
+):
+    """
+    Test copy-offload migration of a VM with an independent non-persistent disk.
+
+    This test validates that a VM with a mix of disks (OS disk persistent from the template,
+    plus an added Independent-NonPersistent data disk) can be successfully migrated using
+    storage array XCOPY capabilities. Independent non-persistent disks discard changes on
+    power-off, so this test confirms MTV handles this disk type during cold migration.
+
+    Test Workflow:
+    1.  Clones a VM from a template and adds an Independent-NonPersistent disk
+        as defined in the test configuration (via the 'plan' fixture).
+    2.  Executes the migration using copy-offload (cold migration).
+    3.  Powers on the destination VM after migration (`target_power_state: on`) and verifies
+        it is alive (SSH connectivity check is part of post-migration validation).
+    """
+    # Get copy-offload configuration
+    copyoffload_config_data = source_provider_data["copyoffload"]
+    storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+    datastore_id = copyoffload_config_data["datastore_id"]
+    storage_class = py_config["storage_class"]
+
+    # Create network migration map
+    vms_names = [vm["name"] for vm in plan["virtual_machines"]]
+    network_migration_map = get_network_migration_map(
+        fixture_store=fixture_store,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        source_provider_inventory=source_provider_inventory,
+        ocp_admin_client=ocp_admin_client,
+        multus_network_name=multus_network_name,
+        target_namespace=target_namespace,
+        vms=vms_names,
+    )
+
+    # Build offload plugin configuration
+    offload_plugin_config = {
+        "vsphereXcopyConfig": {
+            "secretRef": copyoffload_storage_secret.name,
+            "storageVendorProduct": storage_vendor_product,
+        }
+    }
+
+    # Create storage migration map with copy-offload configuration
+    storage_migration_map = get_storage_migration_map(
+        fixture_store=fixture_store,
+        target_namespace=target_namespace,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        ocp_admin_client=ocp_admin_client,
+        source_provider_inventory=source_provider_inventory,
+        vms=vms_names,
+        storage_class=storage_class,
+        # Copy-offload specific parameters
+        datastore_id=datastore_id,
+        offload_plugin_config=offload_plugin_config,
+        access_mode="ReadWriteOnce",
+        volume_mode="Block",
+    )
+
+    # Execute copy-offload migration
+    migrate_vms(
+        ocp_admin_client=ocp_admin_client,
+        request=request,
+        fixture_store=fixture_store,
+        source_provider=source_provider,
+        destination_provider=destination_provider,
+        plan=plan,
+        network_migration_map=network_migration_map,
+        storage_migration_map=storage_migration_map,
+        source_provider_data=source_provider_data,
+        target_namespace=target_namespace,
+        source_vms_namespace=source_vms_namespace,
+        source_provider_inventory=source_provider_inventory,
+        vm_ssh_connections=vm_ssh_connections,
+    )
+
+    # Verify that the correct number of disks were migrated (1 base + 1 added = 2 total)
+    verify_vm_disk_count(destination_provider=destination_provider, plan=plan, target_namespace=target_namespace)
+
+
+@pytest.mark.copyoffload
 @pytest.mark.warm
 @pytest.mark.parametrize(
     "plan,multus_network_name",

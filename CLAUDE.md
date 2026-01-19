@@ -1,314 +1,82 @@
 # MTV API Tests - Claude Instructions
 
-## AI Workflow (MANDATORY)
+## AI Workflow
 
-**This is the required workflow for all code changes to this repository:**
-
-1. **User Prompt** → User requests fix/new test/feature/enhancement
-2. **Agent Selection** - AI analyzes request and triggers appropriate specialist agent:
-   - Python code - `python-expert`
-   - Git operations - `git-expert`
-   - Documentation - `technical-documentation-writer`
-   - Other specialists as needed
-3. **Code Changes** - Specialist agent implements the changes
-4. **Code Review (ALWAYS)** - After ANY code change, AUTOMATICALLY trigger `code-reviewer`
-5. **Review Cycle** - If code-reviewer makes additional changes:
-   - Return to step 4 (trigger code-reviewer again)
-   - Repeat until no more changes are needed
+1. **User Prompt** - User requests fix/new test/feature/enhancement
+2. **Agent Selection** - Route to appropriate specialist agent
+3. **Code Changes** - Specialist implements the changes
+4. **Code Review** - Trigger `code-reviewer` after ANY code change
+5. **Review Cycle** - Repeat steps 4-5 until no more changes needed
 6. **Completion** - All changes reviewed and approved
 
-**CRITICAL RULES:**
+### Agent Routing
 
-- **MANDATORY:** ALL code changes MUST use specialist agents - NEVER modify code directly
-- **MANDATORY:** Python code - `python-expert` agent
-- **MANDATORY:** Git operations - `git-expert` agent
-- **MANDATORY:** Documentation - `technical-documentation-writer` agent
-- **MANDATORY:** NEVER work on main branch - ALWAYS create a feature branch first
-- **MANDATORY:** Update README.md when code changes affect usage, requirements, installation, or configuration
-- **MANDATORY:** Run agents in PARALLEL when possible - launch all independent agents in a SINGLE message
-- **MANDATORY:** After ANY code change - `code-reviewer` agent (AUTOMATIC)
-- **NEVER** skip code-reviewer after code changes
-- **ALWAYS** repeat the review cycle if code-reviewer makes changes
-- **PROHIBITED:** Direct use of Edit/Write tools for code files - agents ONLY
+| Operation                 | Agent                            | Allowed Direct        |
+| ------------------------- | -------------------------------- | --------------------- |
+| Python code (.py files)   | `python-expert`                  | Read, Grep, Glob only |
+| Git operations            | `git-expert`                     | -                     |
+| Documentation (.md files) | `technical-documentation-writer` | -                     |
+| After ANY code change     | `code-reviewer`                  | -                     |
 
-## CRITICAL: Agent Usage is MANDATORY
+**Rules:**
 
-**ALL code operations MUST be performed through specialist agents. Direct code modification is STRICTLY
-PROHIBITED.**
+- Never work on main branch - always create a feature branch first
+- Run agents in PARALLEL when possible
+- Never skip code-reviewer after code changes
+- Update README.md when code changes affect usage/requirements/installation/configuration
 
-### When MUST You Use Agents
+## Code Quality Requirements
 
-| Operation                    | Agent Required                   | Example                                   |
-| ---------------------------- | -------------------------------- | ----------------------------------------- |
-| Python code (any .py file)   | `python-expert`                  | Write test, fix bug, add utility function |
-| Git operations               | `git-expert`                     | Commit, branch, push, create PR           |
-| Documentation (README, docs) | `technical-documentation-writer` | Update docs, write guides                 |
-| Code review                  | `code-reviewer`                  | Review after ANY code change              |
-
-### What is FORBIDDEN
-
-- ❌ **NEVER** use `Edit` tool on `.py` files directly
-- ❌ **NEVER** use `Write` tool to create `.py` files directly
-- ❌ **NEVER** modify code without routing to appropriate agent
-- ❌ **NEVER** skip the agent → code-reviewer workflow
-
-### What is ALLOWED
-
-- ✅ Use `Read` tool to read any file
-- ✅ Use `Grep` to search code
-- ✅ Use `Glob` to find files
-- ✅ Use agents for ALL code modifications
-
-### Enforcement
-
-If you modify code directly instead of using an agent:
-
-1. **VIOLATION** - Stop immediately
-2. Undo the changes
-3. Route to the correct agent
-4. Follow the proper workflow
-
-**Remember:** Analysis and reading = OK. Code changes = AGENT REQUIRED.
-
-## MTV API Tests Specific Guidelines
-
-### Code Quality Requirements
-
-- **Type Annotations:** Always use built-in Python typing (dict, list, tuple, etc.)
-- **Package Management:** Use `uv` for all dependency and project management
-- **OpenShift Integration:** Use `openshift-python-wrapper` for all cluster interactions (see detailed section below)
-- **Pre-commit:** Must pass before any commit - never use `git commit --no-verify`
-- **Code Simplicity:** Keep code simple and readable, avoid over-engineering
+- **Type Annotations:** Use built-in Python typing (dict, list, tuple)
+- **Package Management:** Use `uv` for all dependency management
+- **Pre-commit:** Must pass before any commit - never use `--no-verify`
 - **No Auto-Skip:** Never use `pytest.skip()` inside fixtures - use `@pytest.mark.skipif` at test level
-- Every openshift resource must be created using `create_and_store_resource` function only.
+- **Every OpenShift resource:** Must use `create_and_store_resource()` function
 
-#### CRITICAL: OpenShift/Kubernetes Resource Interactions
+### OpenShift/Kubernetes Resource Interactions
 
-**ALL OpenShift and Kubernetes resource interactions MUST use `openshift-python-wrapper` package.**
-
-This is a **MANDATORY** requirement with no exceptions for direct kubernetes package usage at runtime.
-
-**Correct imports:**
+All cluster interactions must use `openshift-python-wrapper`. Direct `kubernetes` package usage is forbidden at runtime.
 
 ```python
-# ✅ CORRECT - Use openshift-python-wrapper classes
+# Correct imports
 from ocp_resources.namespace import Namespace
 from ocp_resources.secret import Secret
 from ocp_resources.virtual_machine import VirtualMachine
-from ocp_resources.resource import Resource
-
-# ✅ CORRECT - Get DynamicClient instance via ocp_utilities
-from ocp_utilities.infra import get_client  # Returns a DynamicClient instance
-```
-
-**Forbidden imports (runtime usage):**
-
-```python
-# ❌ FORBIDDEN - Direct kubernetes package usage at runtime
-from kubernetes import client
-from kubernetes.client import CoreV1Api, CustomObjectsApi
-from kubernetes.config import load_kube_config
-import kubernetes
-
-# ❌ FORBIDDEN - Instantiating DynamicClient directly
-from kubernetes.dynamic import DynamicClient
-client = DynamicClient(...)  # Never do this - use get_client() instead
-```
-
-**Why this rule exists:**
-
-- `openshift-python-wrapper` provides consistent, tested abstractions for OpenShift resources
-- It handles OpenShift-specific resources (Routes, DeploymentConfigs, etc.) that kubernetes package does not
-- Resource lifecycle management (deploy, wait, delete) is standardized
-- Integration with `create_and_store_resource()` for automatic cleanup tracking
-
-**What to do:**
-
-- ✅ **ALWAYS** use `ocp_resources.*` for resource classes
-- ✅ **ALWAYS** use `ocp_utilities.*` for cluster utilities (including `get_client()`)
-- ✅ **ALWAYS** use `create_and_store_resource()` for resource creation
-- ❌ **NEVER** import directly from `kubernetes` package for runtime usage
-- ❌ **NEVER** use `kubernetes.client.*` APIs
-- ❌ **NEVER** instantiate `kubernetes.dynamic.DynamicClient` directly
-
-**Commonly re-exported symbols from openshift-python-wrapper:**
-
-The following resource classes are available from `ocp_resources` and should be used directly:
-
-| Symbol           | Import Path                                                |
-| ---------------- | ---------------------------------------------------------- |
-| `Resource`       | `from ocp_resources.resource import Resource`              |
-| `Namespace`      | `from ocp_resources.namespace import Namespace`            |
-| `Secret`         | `from ocp_resources.secret import Secret`                  |
-| `Pod`            | `from ocp_resources.pod import Pod`                        |
-| `VirtualMachine` | `from ocp_resources.virtual_machine import VirtualMachine` |
-| `StorageClass`   | `from ocp_resources.storage_class import StorageClass`     |
-| `ConfigMap`      | `from ocp_resources.configmap import ConfigMap`            |
-| `Service`        | `from ocp_resources.service import Service`                |
-
-**Verifying re-exports:**
-
-To check if a symbol is publicly available from `ocp_resources`, inspect the package structure:
-
-```python
-# Check available modules in ocp_resources
-import ocp_resources
-print(dir(ocp_resources))  # Lists available submodules
-
-# Check a specific module's exports
-from ocp_resources import namespace
-print(dir(namespace))  # Should show 'Namespace' class
-```
-
-Look for class names that match Kubernetes/OpenShift resource kinds (e.g., `Namespace`, `Pod`, `Secret`).
-Each resource module typically exports a single class with the resource name.
-
-**Important clarification about get_client() and DynamicClient:**
-
-- `ocp_utilities.infra.get_client()` returns a `kubernetes.dynamic.DynamicClient` instance
-- This does NOT mean `DynamicClient` is re-exported by `openshift-python-wrapper`
-- The fact that `get_client()` returns `DynamicClient` only permits importing `DynamicClient`
-  for type annotations (see below)
-- You must NEVER instantiate `DynamicClient` directly - always use `get_client()`
-
-**Type annotations exception for DynamicClient:**
-
-Importing `kubernetes.dynamic.DynamicClient` is permitted ONLY for type annotations because:
-
-1. `ocp_utilities.infra.get_client()` returns a `DynamicClient` instance
-2. `Resource` classes from `ocp_resources` accept `DynamicClient` as their `client` parameter
-3. Type annotations require referencing the actual type
-
-**Preferred pattern - Use TYPE_CHECKING to avoid runtime import:**
-
-```python
-from __future__ import annotations
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from kubernetes.dynamic import DynamicClient
-
 from ocp_utilities.infra import get_client
-from ocp_resources.namespace import Namespace
 
-def create_namespace(client: DynamicClient, name: str) -> Namespace:
-    """Type annotation using DynamicClient is allowed via TYPE_CHECKING."""
-    return Namespace(client=client, name=name)
-
-# Get the client instance via the approved method
-admin_client = get_client()  # Returns DynamicClient instance
+# Forbidden imports (runtime)
+from kubernetes import client  # Never
+from kubernetes.dynamic import DynamicClient  # Never instantiate directly
 ```
 
-**Alternative - String annotations (also acceptable):**
+**DynamicClient Rules:**
 
-Note: When using explicit string annotations like `"DynamicClient"`, the
-`from __future__ import annotations` import is optional since the type is already a string literal.
+| Usage                                      | Allowed                  |
+| ------------------------------------------ | ------------------------ |
+| Import inside `TYPE_CHECKING` block        | Yes                      |
+| String annotation `"DynamicClient"`        | Yes                      |
+| Instantiate `DynamicClient(...)` directly  | No - use `get_client()`  |
+| Use in `isinstance()` or runtime checks    | No                       |
+| Import other `kubernetes.*` modules        | No                       |
 
-```python
-from ocp_utilities.infra import get_client
-from ocp_resources.namespace import Namespace
+### Function Size
 
-def create_namespace(client: "DynamicClient", name: str) -> Namespace:
-    """String annotation avoids runtime import."""
-    return Namespace(client=client, name=name)
-```
+- Maximum ~50 lines per function
+- Extract helpers with `_` prefix for sub-tasks
+- Function names must clearly describe WHAT they do (e.g., `is_warm_migration_supported` not `is_supported`)
 
-**What is FORBIDDEN even with the type annotation exception:**
+## Code Quality Rules
 
-```python
-# ❌ FORBIDDEN - Runtime import and instantiation
-from kubernetes.dynamic import DynamicClient
-from kubernetes import config
+### Fail Fast - No Invalid States
 
-config.load_kube_config()
-client = DynamicClient(...)  # Never instantiate directly
-
-# ❌ FORBIDDEN - Using DynamicClient for anything other than type hints
-from kubernetes.dynamic import DynamicClient
-isinstance(obj, DynamicClient)  # Runtime usage is forbidden
-```
-
-**Summary of DynamicClient rules:**
-
-| Usage                                        | Allowed?                         |
-| -------------------------------------------- | -------------------------------- |
-| Import inside `TYPE_CHECKING` block          | Yes                              |
-| String annotation `"DynamicClient"`          | Yes                              |
-| Top-level import used only in annotations    | Yes (but prefer TYPE_CHECKING)   |
-| Instantiate `DynamicClient(...)` directly    | No - use `get_client()`          |
-| Use in `isinstance()` or runtime checks      | No                               |
-| Import other `kubernetes.*` modules          | No                               |
-
-#### Function Size - Keep Functions Small
-
-**Large functions MUST be refactored into smaller, focused functions.**
-
-- **Maximum recommended size:** ~50 lines per function
-- **Single responsibility:** Each function should do ONE thing well
-- **Extract helpers:** Use private helper functions (prefixed with `_`) for sub-tasks
-- **Clear names:** Helper function names should describe what they do
-- **Specific names:** Function names must clearly describe WHAT they do (e.g., `is_warm_migration_supported` not `is_supported`)
-
-**Example refactoring pattern:**
+Code must never result in `None` when `None` is not valid. Fail early with clear errors.
 
 ```python
-# ❌ WRONG - One large function doing everything
-def do_complex_task():
-    # 200 lines of code doing multiple things
-    pass
-
-# ✅ CORRECT - Small functions with clear responsibilities
-def _step_one() -> Result:
-    """Handle first step."""
-    ...
-
-def _step_two(input: Result) -> Output:
-    """Handle second step."""
-    ...
-
-def do_complex_task() -> Output:
-    """Orchestrate the complex task."""
-    result = _step_one()
-    return _step_two(result)
-```
-
-## Code Quality Rules (MANDATORY)
-
-These rules are derived from code review feedback and are **MANDATORY** for all code in this repository.
-
-### No Magic Auto-Skip in Fixtures
-
-**Tests must NEVER auto-skip based on fixture conditions.** If a feature is not supported, use explicit `@pytest.mark.skipif` at the test level, not inside fixtures.
-
-```python
-# ❌ WRONG - Magic skip inside fixture hides problems
-@pytest.fixture
-def feature_fixture():
-    if not is_supported():
-        pytest.skip("Not supported")  # Test silently skips - bad!
-    yield resource
-
-# ✅ CORRECT - Explicit skip at test level
-@pytest.mark.skipif(not is_supported(), reason="Feature X not supported on this cluster")
-def test_feature(feature_fixture):
-    ...
-```
-
-**Why:** Auto-skip in fixtures creates "magic" behavior where tests silently skip without clear visibility. The test appears to run but doesn't actually test anything.
-
----
-
-### No Invalid/None States in Code Flow
-
-**Code must NEVER result in `None` when `None` is not a valid state.** If a value is required for the code to function correctly, fail early with a clear error.
-
-```python
-# ❌ WRONG - Allows None to propagate through code
+# Wrong - allows None to propagate
 def get_vm_firmware(template):
-    firmware = template.spec.domain.get("firmware")  # Could be None
-    return firmware  # Caller now has to handle None everywhere
+    return template.spec.domain.get("firmware")
 
-# ✅ CORRECT - Fail fast with clear error
+# Correct - fail fast
 def get_vm_firmware(template):
     firmware = template.spec.domain.get("firmware")
     if firmware is None:
@@ -316,438 +84,205 @@ def get_vm_firmware(template):
     return firmware
 ```
 
-**Why:** Propagating `None` through the code creates cascading failures that are hard to debug. Fail at the source of the problem.
-
----
-
 ### Variables Must Have Consistent Types
 
-**A variable must have ONE type, not multiple possible types.** Mixed types indicate poor design and make code hard to reason about.
-
 ```python
-# ❌ WRONG - actual_affinity could be dict, list, or None
-actual_affinity = vm.get("affinity")  # Type unknown
+# Wrong
+actual_affinity = vm.get("affinity")  # Could be dict, list, or None
 
-# ✅ CORRECT - Explicit type, normalize early
+# Correct
 actual_affinity: dict[str, Any] = vm.get("affinity") or {}
 ```
 
-**Why:** When a variable can be multiple types, every usage must check the type. This leads to defensive code and bugs.
+### Trust Required Arguments
 
----
-
-### No Redundant Checks on Required Arguments
-
-**Don't check if required function arguments exist - they are required.** If an argument is in the function signature without a default, trust that it was provided.
+Don't check if required function arguments exist.
 
 ```python
-# ❌ WRONG - Checking required argument
+# Wrong
 def compare_labels(expected_labels: dict, actual_labels: dict) -> bool:
-    if expected_labels and actual_labels:  # expected_labels is REQUIRED!
+    if expected_labels and actual_labels:
         return expected_labels == actual_labels
     return False
 
-# ✅ CORRECT - Trust required arguments
+# Correct
 def compare_labels(expected_labels: dict, actual_labels: dict) -> bool:
     return expected_labels == actual_labels
 ```
 
-**Why:** If an argument is required (no default value), the caller MUST provide it. Checking for it is unnecessary and hides bugs in calling code.
-
----
-
 ### No Duplicate Code
 
-**Extract common logic into shared functions.** If you see the same pattern more than once, refactor into a reusable function.
+Extract common logic into shared functions.
+
+### No Unnecessary Variables
 
 ```python
-# ❌ WRONG - Same pattern repeated
-def process_vsphere_vm(vm):
-    firmware = vm.spec.domain.get("firmware", {})
-    boot_order = firmware.get("bootOrder", [])
-    # ... process
-
-def process_rhv_vm(vm):
-    firmware = vm.spec.domain.get("firmware", {})
-    boot_order = firmware.get("bootOrder", [])
-    # ... same process
-
-# ✅ CORRECT - Extract common logic
-def _get_boot_order(vm) -> list:
-    firmware = vm.spec.domain.get("firmware", {})
-    return firmware.get("bootOrder", [])
-
-def process_vsphere_vm(vm):
-    boot_order = _get_boot_order(vm)
-    # ... process
-
-def process_rhv_vm(vm):
-    boot_order = _get_boot_order(vm)
-    # ... process
-```
-
----
-
-### No Unnecessary Variables Before Yield/Return
-
-**Don't save values to variables just to immediately yield or return them.**
-
-```python
-# ❌ WRONG - Unnecessary variable
+# Wrong
 @pytest.fixture
 def my_fixture():
     result = create_resource()
     yield result
 
-# ✅ CORRECT - Direct yield
+# Correct
 @pytest.fixture
 def my_fixture():
     yield create_resource()
 ```
 
----
+### Exception Types - RuntimeError is Forbidden
 
-### Use Correct Exception Types
+| Instead of RuntimeError | Use                        |
+| ----------------------- | -------------------------- |
+| Invalid input/config    | `ValueError`               |
+| Missing resource        | `ValueError`               |
+| Type issues             | `TypeError`                |
+| Key not found           | `KeyError` (let propagate) |
+| Connection failures     | `ConnectionError`          |
+| Domain-specific         | Custom exception class     |
 
-**Use specific exception types, not `RuntimeError` for everything.** Match the exception type to the error condition.
-
-| Situation | Exception Type |
-| --------- | -------------- |
-| Missing/invalid configuration | `ValueError` |
-| Resource not found | `ValueError` |
-| Invalid state or argument | `ValueError` |
-| Type mismatch | `TypeError` |
-| Key not found in dict | `KeyError` (let it propagate) |
-| Attribute not found | `AttributeError` |
-| External service failure | `ConnectionError` or custom |
-| Operation not permitted | `PermissionError` |
+### Use Empty Container Defaults
 
 ```python
-# ❌ WRONG - RuntimeError for everything
-if not vm_name:
-    raise RuntimeError("Invalid configuration")
-if not provider.is_connected():
-    raise RuntimeError("Provider error")
-
-# ✅ CORRECT - Specific exception types
-if not vm_name:
-    raise ValueError("vm_name is required but was empty")
-if not provider.is_connected():
-    raise ConnectionError(f"Provider '{provider.name}' is not connected")
-```
-
----
-
-### Use Empty Dict/List Default Instead of None Checks
-
-**If code must continue when a value might be missing, use empty container as default** to avoid repeated None checks.
-
-```python
-# ❌ WRONG - Requires None checks everywhere
+# Wrong
 firmware_spec = template.spec.domain.get("firmware")
 if firmware_spec is not None:
     boot_order = firmware_spec.get("bootOrder")
-    if boot_order is not None:
-        # process
 
-# ✅ CORRECT - Empty dict default, no None checks needed
+# Correct
 firmware_spec: dict[str, Any] = template.spec.domain.get("firmware", {})
 boot_order: list = firmware_spec.get("bootOrder", [])
-# process directly
 ```
 
----
+### Type Annotations in Docstrings
 
-### Defensive Code Indicates Bugs
-
-**If you're writing code to handle a "should never happen" case, there's likely a bug elsewhere.** Fix the root cause instead of adding defensive code.
+All functions must have complete type annotations with Args, Returns, and Raises sections.
 
 ```python
-# ❌ WRONG - Defensive code hiding a bug
-if vm_name is None:
-    logger.warning("VM name is None, skipping...")  # How did we get here?
-    return
-
-# ✅ CORRECT - Fail explicitly to expose the bug
-if vm_name is None:
-    raise ValueError("BUG: vm_name should never be None at this point - check calling code")
-```
-
-**Why:** Defensive code masks bugs and makes them harder to find. If a condition "should never happen", make it fail loudly so the root cause can be fixed.
-
----
-
-### Function Names Must Be Specific and Descriptive
-
-**Function names must clearly describe what they do.** Avoid vague, generic names.
-
-```python
-# ❌ WRONG - Vague names
-def is_supported():  # Supported for what?
-def process_data():  # What data? What processing?
-def get_value():     # What value?
-
-# ✅ CORRECT - Specific, descriptive names
-def is_warm_migration_supported():
-def process_vm_network_config():
-def get_storage_class_name():
-```
-
----
-
-### Type Annotations Required in Docstrings
-
-**All functions must have complete type annotations in docstrings** with Args, Returns, and Raises sections.
-
-```python
-# ❌ WRONG - No types in docstring
-def process_vm(vm, options):
-    """Process a VM.
-
-    Args:
-        vm: The VM to process
-        options: Processing options
-    """
-
-# ✅ CORRECT - Complete types in docstring
 def process_vm(vm: VirtualMachine, options: dict[str, Any]) -> MigrationResult:
     """Process a VM for migration.
 
     Args:
         vm (VirtualMachine): The VM resource to process
-        options (dict[str, Any]): Processing options including timeout and retries
+        options (dict[str, Any]): Processing options
 
     Returns:
         MigrationResult: The result of the migration processing
 
     Raises:
-        ValueError: If VM is in an invalid state for migration
-        ConnectionError: If connection to provider fails
+        ValueError: If VM is in an invalid state
     """
 ```
 
----
+### Validate at Source
 
-### Use Direct Attribute Access
-
-**Use direct attribute access; if the attribute doesn't exist, it will return `None`.** Don't over-complicate with nested checks.
+Validation must happen in fixtures (where values originate), not in utility functions.
 
 ```python
-# ❌ WRONG - Overly defensive nested checks
-display_name = None
-if csv.instance and csv.instance.spec:
-    display_name = csv.instance.spec.get("displayName")
+# Wrong - validating in utility (too late)
+def apply_node_label(labeled_worker_node, ...):
+    if not labeled_worker_node:
+        raise ValueError("No worker node provided")
 
-# ✅ CORRECT - Direct attribute access
-display_name = csv.instance.spec.displayName  # Returns None if not exists
+# Correct - validate in fixture
+@pytest.fixture
+def labeled_worker_node(worker_nodes, target_node_selector):
+    node = find_node_with_selector(worker_nodes, target_node_selector)
+    if not node:
+        raise ValueError(f"No node found matching selector {target_node_selector}")
+    return node
 ```
 
----
+### Fixture Rules
 
-### No Useless Assignments
+- **No autouse:** Only `autouse_fixtures` in conftest.py is allowed
+- **Noun names:** Fixtures represent resources (`source_provider` not `setup_provider`)
+- **No magic skip:** Use `@pytest.mark.skipif` at test level, not `pytest.skip()` in fixtures
 
-**Don't assign values that are never used.** If you need to raise an exception, raise it directly.
+### No Unnecessary Randomness
 
 ```python
-# ❌ WRONG - Useless assignment before raise
-result = some_operation()
-if error_condition:
-    result = None  # This assignment is useless
-    raise ValueError("Error occurred")
+# Wrong
+selected_node = random.choice(available_nodes)
 
-# ✅ CORRECT - Just raise
-result = some_operation()
-if error_condition:
-    raise ValueError("Error occurred")
+# Correct
+selected_node = available_nodes[0]
 ```
 
----
-
-### Document Expected Exceptions
-
-**When catching exceptions, document in which cases they can occur.** If you can't explain when an exception would happen, you probably don't need to catch it.
+### Use Context Managers for Cleanup
 
 ```python
-# ❌ WRONG - Catching exception without understanding when it occurs
-try:
-    value = some_operation()
-except (KeyError, TypeError, AttributeError):
-    value = default  # When do these happen?
+# Wrong
+editor = ResourceEditor(node)
+editor.add_label(label)
+# Caller must remember to cleanup
 
-# ✅ CORRECT - Document or don't catch
-# Only catch if you know when it happens and have a recovery strategy
-try:
-    value = external_api.get_value()  # External API may not have the field
-except KeyError:
-    # External API response missing 'value' field - use default
-    value = default
+# Correct
+with ResourceEditor(node) as editor:
+    editor.add_label(label)
+    yield
 ```
-
----
-
-### Scope Changes Appropriately
-
-**Don't apply changes to unrelated code.** When fixing a bug or adding a feature, keep changes focused on the intended scope.
-
-- ✅ Fix the bug in the affected function
-- ❌ Don't "clean up" unrelated code in the same PR
-- ❌ Don't add the same pattern to other tests that don't need it
-- ❌ Don't refactor working code while fixing a bug
-
----
-
-### Testing Standards
-
-- **Real Environments:** Tests run against real clusters and real providers
-- **Provider Support:** VMware vSphere, RHV, OpenStack, OVA, OpenShift
-- **Migration Types:** Both cold and warm migration testing
-- **Resource Management:** Comprehensive fixture-based cleanup and teardown
-- **Parallel Execution:** Support for pytest-xdist concurrent testing
-
-### Development Workflow
-
-- **Package Installation:** `uv sync`
-- **Test Execution:** `uv run pytest <options>` (on live clusters only - AI cannot run tests)
-- **Linting:** `ruff check` and `ruff format`
-- **Type Checking:** `mypy` with strict configuration
-- **Container Build:** `podman build -f Dockerfile -t mtv-api-tests`
-
-### Configuration Management
-
-- **Provider Configuration:** `.providers.json` file in project root
-- **Test Configuration:** pytest-testconfig for test parameters
-- **Environment Variables:** OpenShift cluster and provider authentication
-- **Storage Classes:** Configurable via test configuration (nfs, csi, etc.)
 
 ## Architecture Patterns
 
 ### Provider Abstraction
 
-- **Base Class:** `BaseProvider` in `libs/base_provider.py`
-- **Provider Implementations:** VMware, RHV, OpenStack, OVA, OpenShift providers
-- **Unified VM Representation:** Consistent VM data structure across providers
-- **Connection Management:** Context manager support for provider connections
+- Base class: `BaseProvider` in `libs/base_provider.py`
+- Implementations: VMware, RHV, OpenStack, OVA, OpenShift providers
+- Context manager support for provider connections
 
 ### Test Structure
 
-- **Fixtures:** Session-scoped fixtures for resource management in `conftest.py`
-- **Parametrization:** Provider-specific test parametrization
-- **Markers:** tier0, warm, remote, copyoffload markers for test categorization
-- **Data Collection:** Automatic log and must-gather collection on failures
+- Session-scoped fixtures for resource management
+- Provider-specific test parametrization
+- Markers: tier0, warm, remote, copyoffload
+- Automatic log/must-gather collection on failures
 
-### Resource Management
+### Development Workflow
 
-- **Cleanup Strategy:** Comprehensive teardown with fixture tracking
-- **Namespace Management:** Unique namespace generation per test session
-- **Resource Tracking:** JSON-based resource tracking for post-test cleanup
-- **Error Recovery:** Must-gather data collection on test failures
+- Package Installation: `uv sync`
+- Linting: `ruff check` and `ruff format`
+- Type Checking: `mypy`
+- Container Build: `podman build -f Dockerfile -t mtv-api-tests`
 
-## Critical Constraints and Patterns
+## Critical Constraints
 
-### CRITICAL: Test Execution Prohibition
+### Test Execution Prohibition
 
-**AI must NEVER run tests directly.**
+AI must NEVER run tests directly (`pytest`, `uv run pytest`). Tests require live clusters, provider connections, and credentials.
 
-- ❌ **FORBIDDEN:** `pytest`, `uv run pytest`, any test execution commands
-- ✅ **ALLOWED:** Analyze tests, write tests, fix tests, read test output
+AI can: Read/analyze/write/fix tests, suggest improvements, review structure
+AI cannot: Execute tests, validate by running
 
-**Why:** Tests require:
+### Deterministic Tests - No Defaults for Our Config
 
-- Live OpenShift cluster with MTV operator installed
-- Real provider connections (VMware vSphere, RHV, OpenStack, etc.)
-- Network access to source infrastructure
-- Configured credentials and authentication
-
-**AI can:**
-
-- Read and analyze test code
-- Write new tests following patterns (via `python-expert` agent)
-- Fix failing tests based on logs (via `python-expert` agent)
-- Suggest test improvements
-- Review test structure (via `code-reviewer` agent)
-
-**AI cannot:**
-
-- Execute pytest commands
-- Run individual tests
-- Validate tests by running them
-- Modify code directly (must use agents)
-
-### CRITICAL: Deterministic Tests - No Defaults/Fallbacks
-
-**All code must be deterministic with NO assumptions or default values for configurations WE CONTROL.**
-
-**This rule applies to configurations defined in our codebase:**
-
-- `py_config` - test configuration we define in `tests/tests_config/config.py`
-- `plan` - test plan parameters we define in test parametrization
-- `tests_params` - test parameters dictionary we define
-- Any configuration dictionary or structure defined in our codebase
-
-**For OUR configurations - NEVER use defaults:**
+For configurations we control (`py_config`, `plan`, `tests_params`), never use defaults:
 
 ```python
-# ❌ WRONG - Uses fallback/default for OUR configuration
+# Wrong
 storage_class = py_config.get("storage_class", "default-storage")
-vm_name = plan.get("vm_name", "default-vm")
-timeout = py_config.get("plan_wait_timeout", 3600)
 
-# ✅ CORRECT - Deterministic, fails fast with KeyError
+# Correct
 storage_class = py_config["storage_class"]
-vm_name = plan["virtual_machines"][0]["name"]
-timeout = py_config["plan_wait_timeout"]
 ```
 
-**For external/provider configurations - `.get()` with validation is acceptable:**
+For external/provider data, `.get()` with validation is acceptable:
 
 ```python
-# ✅ ACCEPTABLE - External config with explicit validation and meaningful error
 vm_id = provider_data.get("vm_id")
 if not vm_id:
-    raise ValueError(f"VM ID not found in provider data for VM '{vm_name}'.")
-
-# ✅ ACCEPTABLE - Provider API response with validation
-disk_type = vm_details.get("disk_type")
-if disk_type not in ["thin", "thick-lazy", "thick-eager"]:
-    raise ValueError(f"Unsupported disk type '{disk_type}' for VM '{vm_name}'")
+    raise ValueError(f"VM ID not found for VM '{vm_name}'")
 ```
 
-**Why this distinction:**
-
-- **Our config:** We control it, should be complete, fail fast if missing (KeyError)
-- **External data:** We don't control it, explicit validation provides better error messages than raw KeyError
-- Tests must fail immediately if OUR configuration is incomplete
-- External data validation should provide context-rich error messages
-
-**Exception - Optional feature flags in OUR config:**
+**Exception - Optional feature flags:**
 
 ```python
-# ✅ OK - Optional boolean feature flag in our config
-if plan.get("warm_migration", False):  # Optional feature, defaults to False
+if plan.get("warm_migration", False):  # OK
     setup_warm_migration()
-
-# ✅ OK - Optional list in our config
-hooks = plan.get("pre_migration_hooks", [])  # Optional hooks, defaults to empty
-for hook in hooks:
-    execute_hook(hook)
 ```
 
-### Resource Creation Pattern - MANDATORY
+### Resource Creation - create_and_store_resource()
 
-**CRITICAL: Every OpenShift resource MUST be created using `create_and_store_resource()` function.**
-
-**Location:** `utilities/resources.py:create_and_store_resource()`
-
-**Why This Pattern:**
-
-- Automatic resource tracking for cleanup
-- Unique name generation with UUID (prevents conflicts in parallel execution)
-- Handles resource conflicts gracefully (reuses existing)
-- Ensures cleanup even when tests fail or crash
-- Truncates names to Kubernetes 63-character limit
-- Thread-safe for parallel test execution (pytest-xdist)
-
-**Function Signature:**
+Every OpenShift resource must use `utilities/resources.py:create_and_store_resource()`.
 
 ```python
 def create_and_store_resource(
@@ -759,88 +294,25 @@ def create_and_store_resource(
 ) -> Any:
 ```
 
-**Correct Usage Examples:**
+Features: auto-generates unique names, deploys and waits, stores in `fixture_store["teardown"]`, handles conflicts, truncates to 63 chars.
 
 ```python
-# Namespace creation
+# Correct
 namespace = create_and_store_resource(
     fixture_store=fixture_store,
     resource=Namespace,
     client=ocp_admin_client,
     name="my-namespace",
-    label={"app": "mtv-tests"},
 )
 
-# Provider creation
-provider = create_and_store_resource(
-    fixture_store=fixture_store,
-    resource=Provider,
-    client=ocp_admin_client,
-    namespace=target_namespace,
-    secret_name=secret.name,
-    url=provider_url,
-    provider_type=Provider.ProviderType.VSPHERE,
-)
-
-# Secret creation
-secret = create_and_store_resource(
-    client=ocp_admin_client,
-    fixture_store=fixture_store,
-    resource=Secret,
-    namespace=target_namespace,
-    string_data={
-        "user": username,
-        "password": password,
-        "insecureSkipVerify": "true",
-    },
-)
-
-# NetworkAttachmentDefinition
-nad = create_and_store_resource(
-    fixture_store=fixture_store,
-    resource=NetworkAttachmentDefinition,
-    client=ocp_admin_client,
-    namespace=target_namespace,
-    name="bridge-network",
-    cni_type="bridge",
-    config=multus_config,
-)
-```
-
-**What NEVER to do:**
-
-```python
-# ❌ WRONG - Direct resource instantiation bypasses tracking
+# Wrong - bypasses tracking
 namespace = Namespace(client=ocp_admin_client, name="my-namespace")
 namespace.deploy()
-
-# ❌ WRONG - No cleanup tracking
-provider = Provider(
-    client=ocp_admin_client,
-    namespace=target_namespace,
-    secret_name=secret.name,
-)
-provider.deploy(wait=True)
-
-# ❌ WRONG - Manual resource creation
-secret_dict = {...}
-Secret(**secret_dict).deploy()
 ```
 
-**Key Features:**
+## Test Structure Pattern
 
-1. **Auto-generates unique names** using session UUID if name not provided
-2. **Deploys resource** and waits for readiness by default
-3. **Stores metadata** in `fixture_store["teardown"]` for cleanup
-4. **Handles conflicts** - reuses existing resources if already created
-5. **Name truncation** - ensures names don't exceed 63 chars (Kubernetes limit)
-6. **Test tracking** - optional `test_name` for test-specific resources
-
-### Test Structure Pattern - How to Add New Tests
-
-**ALL tests in this repository follow the same structure.**
-
-**Standard Test Pattern:**
+All tests follow this structure:
 
 ```python
 from pytest_testconfig import config as py_config
@@ -849,545 +321,135 @@ from utilities.mtv_migration import create_storagemap_and_networkmap, migrate_vm
 @pytest.mark.parametrize(
     "plan",
     [pytest.param(py_config["tests_params"]["test_name_here"])],
-    indirect=True,  # REQUIRED - passes to plan fixture first
+    indirect=True,
     ids=["descriptive-test-id"],
 )
-@pytest.mark.tier0  # optional marker
+@pytest.mark.tier0  # optional
 @pytest.mark.warm   # optional: warm/remote/copyoffload
 def test_name_here(
-    request,                    # pytest request object
-    fixture_store,              # resource tracking dictionary
-    ocp_admin_client,           # OpenShift DynamicClient
-    target_namespace,           # test namespace
-    destination_provider,       # destination provider
-    plan,                       # test plan from parametrize
-    source_provider,            # source provider connection
-    source_provider_data,       # source provider config
-    multus_network_name,        # multus network name
-    source_provider_inventory,  # provider inventory
-    source_vms_namespace,       # source VMs namespace
+    request, fixture_store, ocp_admin_client, target_namespace,
+    destination_provider, plan, source_provider, source_provider_data,
+    multus_network_name, source_provider_inventory, source_vms_namespace,
 ):
-    # 1. Create storage and network migration maps
+    # 1. Create migration maps
     storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
-        fixture_store=fixture_store,
-        source_provider=source_provider,
+        fixture_store=fixture_store, source_provider=source_provider,
         destination_provider=destination_provider,
         source_provider_inventory=source_provider_inventory,
-        ocp_admin_client=ocp_admin_client,
-        multus_network_name=multus_network_name,
-        target_namespace=target_namespace,
-        plan=plan,
+        ocp_admin_client=ocp_admin_client, multus_network_name=multus_network_name,
+        target_namespace=target_namespace, plan=plan,
     )
 
     # 2. Execute migration
     migrate_vms(
-        ocp_admin_client=ocp_admin_client,
-        request=request,
-        fixture_store=fixture_store,
-        source_provider=source_provider,
-        destination_provider=destination_provider,
-        plan=plan,
+        ocp_admin_client=ocp_admin_client, request=request,
+        fixture_store=fixture_store, source_provider=source_provider,
+        destination_provider=destination_provider, plan=plan,
         network_migration_map=network_migration_map,
         storage_migration_map=storage_migration_map,
         source_provider_data=source_provider_data,
-        target_namespace=target_namespace,
-        source_vms_namespace=source_vms_namespace,
+        target_namespace=target_namespace, source_vms_namespace=source_vms_namespace,
         source_provider_inventory=source_provider_inventory,
     )
 ```
 
-**Step-by-Step Guide to Add New Test:**
+### Adding New Tests
 
-1. **Add test configuration** to `tests/tests_config/config.py`:
-
-   ```python
-   tests_params: dict = {
-       "test_my_new_test": {
-           "virtual_machines": [
-               {
-                   "name": "vm-name-in-source",
-                   "source_vm_power": "on",  # or "off"
-                   "guest_agent": True,      # if guest agent installed
-               },
-           ],
-           "warm_migration": False,  # True for warm, False for cold
-       },
-   }
-   ```
-
-2. **Create test file** in `tests/` directory:
-   - File naming: `test_<feature>_migration.py`
-   - Example: `test_my_feature_migration.py`
-
-3. **Import required modules** (see example above)
-
-4. **Add parametrize decorator** with your test config:
-
-   ```python
-   @pytest.mark.parametrize(
-       "plan",
-       [pytest.param(py_config["tests_params"]["test_my_new_test"])],
-       indirect=True,
-       ids=["my-test-id"],
-   )
-   ```
-
-5. **Add pytest markers**:
-   - **Optional:** `@pytest.mark.tier0` (core functionality tests)
-   - **Optional:** `@pytest.mark.warm`, `@pytest.mark.remote`, `@pytest.mark.copyoffload`
-
-6. **Define test function** with standard fixtures (see example above)
-
-7. **Follow the two-step pattern:**
-   - Step 1: Create migration maps
-   - Step 2: Execute migration
-
-### Example: Adding a new warm migration test
-
-File: `tests/test_my_warm_migration.py`
+1. Add configuration to `tests/tests_config/config.py`:
 
 ```python
-import pytest
-from pytest_testconfig import config as py_config
-
-from utilities.mtv_migration import create_storagemap_and_networkmap, migrate_vms
-
-
-@pytest.mark.parametrize(
-    "plan",
-    [pytest.param(py_config["tests_params"]["test_my_warm_migration"])],
-    indirect=True,
-    ids=["warm-rhel9"],
-)
-@pytest.mark.tier0
-@pytest.mark.warm
-def test_my_warm_migration(
-    request,
-    fixture_store,
-    ocp_admin_client,
-    target_namespace,
-    destination_provider,
-    plan,
-    source_provider,
-    source_provider_data,
-    multus_network_name,
-    source_provider_inventory,
-    source_vms_namespace,
-):
-    storage_migration_map, network_migration_map = create_storagemap_and_networkmap(
-        fixture_store=fixture_store,
-        source_provider=source_provider,
-        destination_provider=destination_provider,
-        source_provider_inventory=source_provider_inventory,
-        ocp_admin_client=ocp_admin_client,
-        multus_network_name=multus_network_name,
-        target_namespace=target_namespace,
-        plan=plan,
-    )
-
-    migrate_vms(
-        ocp_admin_client=ocp_admin_client,
-        request=request,
-        fixture_store=fixture_store,
-        source_provider=source_provider,
-        destination_provider=destination_provider,
-        plan=plan,
-        network_migration_map=network_migration_map,
-        storage_migration_map=storage_migration_map,
-        source_provider_data=source_provider_data,
-        target_namespace=target_namespace,
-        source_vms_namespace=source_vms_namespace,
-        source_provider_inventory=source_provider_inventory,
-    )
-```
-
-**DO NOT:**
-
-- ❌ Create custom test structures
-- ❌ Skip parametrization
-- ❌ Hardcode VM names in test (use config)
-- ❌ Create resources without `create_and_store_resource()`
-- ❌ Skip feature markers when applicable (warm, remote, copyoffload)
-
-### Test Configuration Pattern
-
-**All test configurations are centralized in `tests/tests_config/config.py`.**
-
-**Configuration Structure:**
-
-```python
-global config
-
-# Global settings (module-level variables)
-insecure_verify_skip: str = "true"
-number_of_vms: int = 1
-check_vms_signals: bool = True
-target_namespace_prefix: str = "auto"
-mtv_namespace: str = "openshift-mtv"
-plan_wait_timeout: int = 3600
-remote_ocp_cluster: str = ""
-
-# Test-specific parameters
 tests_params: dict = {
-    "test_name": {
-        "virtual_machines": [
-            {
-                "name": "vm-name",
-                "source_vm_power": "on",  # "on" or "off"
-                "guest_agent": True,      # True if GA installed
-            },
-        ],
-        "warm_migration": False,  # True for warm, False for cold
+    "test_my_new_test": {
+        "virtual_machines": [{"name": "vm-name", "source_vm_power": "on", "guest_agent": True}],
+        "warm_migration": False,
     },
 }
-
-# Auto-export to pytest config (DO NOT MODIFY THIS SECTION)
-for _dir in dir():
-    val = locals()[_dir]
-    if type(val) not in [bool, list, dict, str, int]:
-        continue
-    if _dir in ["encoding", "py_file", "__annotations__"]:
-        continue
-    config[_dir] = locals()[_dir]
 ```
 
-**How to Add New Test Configuration:**
+1. Create test file `tests/test_<feature>_migration.py`
+2. Add parametrize decorator with `indirect=True`
+3. Add pytest markers (tier0, warm, remote, copyoffload)
+4. Follow the two-step pattern: create maps, execute migration
 
-1. **Add entry to `tests_params` dictionary**:
+**VM Configuration Options:**
 
-   ```python
-   tests_params: dict = {
-       # Existing tests...
+| Option            | Required | Values                              |
+| ----------------- | -------- | ----------------------------------- |
+| `name`            | Yes      | VM name in source provider          |
+| `source_vm_power` | No       | "on" or "off"                       |
+| `guest_agent`     | No       | True if installed                   |
+| `clone`           | No       | True to clone before migration      |
+| `disk_type`       | No       | "thin", "thick-lazy", "thick-eager" |
 
-       # Your new test
-       "test_my_new_feature": {
-           "virtual_machines": [
-               {
-                   "name": "source-vm-name",
-                   "source_vm_power": "on",
-                   "guest_agent": True,
-               },
-           ],
-           "warm_migration": False,
-       },
-   }
-   ```
+## Fixture Patterns
 
-2. **VM configuration options:**
+### conftest.py Structure
 
-   ```python
-   {
-       "name": "vm-name",              # REQUIRED: VM name in source provider
-       "source_vm_power": "on",         # Optional: "on" or "off"
-       "guest_agent": True,             # Optional: True if guest agent installed
-       "clone": True,                   # Optional: Clone VM before migration
-       "disk_type": "thin",             # Optional: "thin", "thick-lazy", "thick-eager"
-   }
-   ```
+Only pytest fixtures and hooks belong in conftest.py. Helper functions go to `utilities/`.
 
-3. **Access in tests:**
+### Fixture Scopes
 
-   ```python
-   from pytest_testconfig import config as py_config
-
-   # Access test parameters
-   plan_config = py_config["tests_params"]["test_my_new_feature"]
-
-   # Use in parametrize
-   @pytest.mark.parametrize(
-       "plan",
-       [pytest.param(py_config["tests_params"]["test_my_new_feature"])],
-       indirect=True,
-   )
-   ```
-
-4. **Access global settings:**
-
-   ```python
-   # Global configuration
-   namespace_prefix = py_config["target_namespace_prefix"]
-   plan_timeout = py_config["plan_wait_timeout"]
-   mtv_namespace = py_config["mtv_namespace"]
-   ```
-
-**Configuration Requirements (MANDATORY):**
-
-- ✅ **MUST** use descriptive test parameter names matching test function names
-- ✅ **MUST** specify required VM properties (name is required)
-- ✅ **MUST** set `warm_migration` explicitly (True/False, no defaults)
-- ✅ **MUST** use type annotations for global settings
-- ❌ **NEVER** modify the auto-export loop at the bottom
-- ❌ **NEVER** add non-serializable types to config
-
-### Fixture Patterns
-
-**This project uses pytest fixtures extensively for resource management.**
-
-#### CRITICAL: conftest.py Structure
-
-**`conftest.py` files ONLY accept pytest fixtures and pytest hooks. No standalone functions allowed.**
-
-**What belongs in conftest.py:**
-
-- ✅ **Pytest fixtures** - Functions decorated with `@pytest.fixture`
-- ✅ **Pytest hooks** - Functions like `pytest_addoption`, `pytest_runtest_makereport`,
-  `pytest_sessionstart`, `pytest_configure`, `pytest_collection_modifyitems`, etc.
-
-**What does NOT belong in conftest.py:**
-
-- ❌ **Standalone helper functions** - Move to `utilities/` directory
-- ❌ **Utility functions** - Move to appropriate utility module
-- ❌ **Constants or configuration** - Move to `tests/tests_config/config.py`
-- ❌ **Classes** (unless pytest plugin classes) - Move to `libs/` or `utilities/`
-
-**Examples:**
-
-```python
-# ✅ CORRECT - conftest.py content
-import pytest
-
-@pytest.fixture(scope="session")
-def ocp_admin_client():
-    """Pytest fixture - belongs in conftest.py"""
-    return get_cluster_client()
-
-def pytest_addoption(parser):
-    """Pytest hook - belongs in conftest.py"""
-    parser.addoption("--provider", action="store", default="vsphere")
-
-def pytest_runtest_makereport(item, call):
-    """Pytest hook - belongs in conftest.py"""
-    if call.excinfo is not None:
-        collect_must_gather(item)
-```
-
-```python
-# ❌ WRONG - These do NOT belong in conftest.py
-def get_vm_details(provider, vm_name):
-    """Helper function - move to utilities/"""
-    ...
-
-def validate_migration_status(plan):
-    """Utility function - move to utilities/"""
-    ...
-
-MAX_RETRIES = 3  # Constant - move to config
-```
-
-**Where to put helper functions:**
-
-| Function Type       | Location                      |
-| ------------------- | ----------------------------- |
-| Migration utilities | `utilities/mtv_migration.py`  |
-| Resource utilities  | `utilities/resources.py`      |
-| Provider utilities  | `utilities/providers.py`      |
-| General utilities   | `utilities/utils.py`          |
-| Provider classes    | `libs/<provider>.py`          |
-
-**Why this rule exists:**
-
-- `conftest.py` has special meaning in pytest - it's for fixtures and hooks only
-- Mixing helper functions makes the file harder to maintain
-- Helper functions in conftest.py cannot be easily imported by other modules
-- Utility modules provide better code organization and reusability
-
-#### Session-Scoped Fixtures
-
-**Used for resources shared across ALL tests in a session:**
+**Session-scoped** - shared across all tests:
 
 ```python
 @pytest.fixture(scope="session")
 def ocp_admin_client():
-    """Single OpenShift client for entire test session"""
     return get_cluster_client()
-
-@pytest.fixture(scope="session")
-def session_uuid(fixture_store):
-    """Unique identifier for this test session"""
-    _uuid = generate_name_with_uuid(name="auto")
-    fixture_store["session_uuid"] = _uuid
-    return _uuid
-
-@pytest.fixture(scope="session")
-def source_provider(fixture_store, target_namespace, ...):
-    """Single provider connection for entire session"""
-    with create_source_provider(
-        source_provider_data=source_provider_data,
-        namespace=target_namespace,
-        admin_client=ocp_admin_client,
-        session_uuid=fixture_store["session_uuid"],
-        fixture_store=fixture_store,
-    ) as _source_provider:
-        yield _source_provider
-    _source_provider.disconnect()
 ```
 
-**Common session fixtures:**
+Common: `ocp_admin_client`, `session_uuid`, `target_namespace`, `source_provider`, `destination_provider`, `fixture_store`
 
-- `ocp_admin_client` - OpenShift DynamicClient
-- `session_uuid` - Unique session identifier
-- `target_namespace` - Test namespace
-- `source_provider` - Source provider connection
-- `destination_provider` - Destination provider connection
-- `fixture_store` - Resource tracking dictionary
-
-#### Function-Scoped Fixtures
-
-**Used for resources created per test:**
+**Function-scoped** - per test:
 
 ```python
 @pytest.fixture(scope="function")
-def plan(request, fixture_store, source_provider, ...):
-    """New migration plan for each test"""
-    # Get plan from parametrize
+def plan(request, fixture_store, source_provider):
     plan: dict[str, Any] = request.param
-    virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]
-
-    # Clone VMs for testing (don't modify source)
-    for vm in virtual_machines:
-        source_vm_details = source_provider.vm_dict(
-            name=vm["name"],
-            clone=True,
-            session_uuid=fixture_store["session_uuid"],
-        )
-        vm["name"] = source_vm_details["name"]  # Update with cloned name
-
+    # Clone VMs, update names
     yield plan
-
-    # Teardown: track resources for cleanup
-    for vm in plan["virtual_machines"]:
-        fixture_store["teardown"].setdefault(VirtualMachine.kind, []).append({
-            "name": vm["name"],
-            "namespace": target_namespace,
-        })
+    # Track for cleanup
 ```
 
-#### fixture_store Pattern
-
-**Used for cross-fixture communication and resource tracking:**
-
-```python
-# Store data for other fixtures to access
-@pytest.fixture(scope="session")
-def base_resource_name(fixture_store, session_uuid, source_provider_data):
-    name = f"{session_uuid}-{source_provider_data['type']}"
-    fixture_store["base_resource_name"] = name  # Store for later use
-    return name
-
-# Access stored data from another fixture
-@pytest.fixture(scope="function")
-def my_resource(fixture_store, ocp_admin_client):
-    # Access base_resource_name from fixture_store
-    base_name = fixture_store["base_resource_name"]
-
-    resource = create_and_store_resource(
-        fixture_store=fixture_store,
-        resource=MyResource,
-        client=ocp_admin_client,
-        name=f"{base_name}-my-resource",
-    )
-    return resource
-```
-
-**fixture_store Structure:**
+### fixture_store Structure
 
 ```python
 {
     "session_uuid": "auto-abc123",
     "base_resource_name": "auto-abc123-vsphere-8-0",
-    "vms_for_current_session": {"vm1", "vm2", "vm3"},
     "teardown": {
         "Namespace": [{"name": "ns1", ...}],
-        "Provider": [{"name": "provider1", ...}],
         "VirtualMachine": [{"name": "vm1", ...}],
     },
 }
 ```
 
-**Fixture Requirements (MANDATORY):**
+## Test Markers
 
-- ✅ **MUST** use session scope for shared, expensive resources (providers, clients)
-- ✅ **MUST** use function scope for test-specific resources (plans, VMs)
-- ✅ **MUST** store cross-fixture data in `fixture_store`
-- ✅ **MUST** track ALL resources in `fixture_store["teardown"]` for cleanup
-- ❌ **NEVER** create resources without `create_and_store_resource()`
-- ❌ **NEVER** modify shared session fixtures in tests
-
-### Test Markers and Categorization
-
-**Pytest markers are used to categorize and selectively run tests.**
-
-**Available Markers (defined in `pytest.ini`):**
-
-| Marker        | Purpose                          | Example                         |
-| ------------- | -------------------------------- | ------------------------------- |
-| `tier0`       | Core functionality (smoke tests) | Basic cold migration            |
-| `warm`        | Warm migration tests             | Incremental snapshot migrations |
-| `remote`      | Remote cluster tests             | Cross-cluster migrations        |
-| `copyoffload` | Copy-offload (XCOPY) tests       | VMware copyoffload              |
-
-**How to Apply Markers:**
+| Marker        | Purpose                          |
+| ------------- | -------------------------------- |
+| `tier0`       | Core functionality (smoke tests) |
+| `warm`        | Warm migration tests             |
+| `remote`      | Remote cluster tests             |
+| `copyoffload` | Copy-offload (XCOPY) tests       |
 
 ```python
-# Single marker
-@pytest.mark.tier0
-def test_basic_migration(...):
-    pass
-
-# Multiple markers
 @pytest.mark.tier0
 @pytest.mark.warm
-def test_warm_migration(...):
-    pass
-
-# Conditional skip
-@pytest.mark.tier0
-@pytest.mark.remote
-@pytest.mark.skipif(
-    not get_value_from_py_config("remote_ocp_cluster"),
-    reason="No remote OCP cluster provided"
-)
-def test_remote_migration(...):
-    pass
-
-# Copy-offload test
-@pytest.mark.tier0
-@pytest.mark.copyoffload
-def test_copyoffload_migration(...):
+@pytest.mark.skipif(not get_value_from_py_config("remote_ocp_cluster"), reason="No remote cluster")
+def test_remote_warm_migration(...):
     pass
 ```
 
-**Marker Requirements:**
+## Parallel Execution (pytest-xdist)
 
-- ✅ **OPTIONAL:** `tier0` marker for core functionality tests
-- ✅ **OPTIONAL:** Add feature markers (warm, remote, copyoffload)
-- ❌ **DON'T:** Use undefined markers (must be in pytest.ini)
+Tests are parallel-safe because:
 
-### Parallel Execution Support
+- Unique namespaces per session via `session_uuid`
+- Each worker has isolated `fixture_store`
+- `create_and_store_resource()` generates unique names
 
-**Tests support parallel execution using pytest-xdist.**
-
-**Why Parallel Execution is Safe:**
-
-1. **Unique namespaces per session:**
-   - Each test session gets a unique UUID via `session_uuid` fixture
-   - Namespace pattern: `{target_namespace_prefix}-{session_uuid}`
-   - Prevents resource conflicts between parallel runs
-
-2. **Resource isolation:**
-   - Each worker has its own `fixture_store`
-   - Resources tracked independently per worker
-   - Cleanup happens per worker
-
-3. **Thread-safe patterns:**
-   - ✅ Unique resource names (UUID-based via `create_and_store_resource()`)
-   - ✅ Isolated namespaces per worker
-   - ✅ Independent fixture stores
-   - ✅ No shared mutable state between tests
-
-**Key Takeaway for Code:**
+Rules:
 
 - Always use fixtures for namespaces (never hardcode)
 - Always use `create_and_store_resource()` for unique names
 - Never share mutable state between tests
-- Session fixtures create expensive resources once, reused across tests in same worker

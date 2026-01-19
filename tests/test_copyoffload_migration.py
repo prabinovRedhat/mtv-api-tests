@@ -1584,16 +1584,16 @@ def test_copyoffload_10_mixed_disks_migration(
     """
     Test copy-offload migration of a VM with 10 mixed (thin/thick) disks.
 
-    This test validates that a VM with a large number of disks (10 total) and mixed
+    This test validates that a VM with a large number of disks (11 total) and mixed
     provisioning types (thin and thick-lazy) can be successfully migrated using
     storage array XCOPY capabilities. This ensures robustness and scalability of
     the copy-offload mechanism.
 
     Test Workflow:
-    1.  Clones a VM from a template and adds 9 additional disks with alternating
-        thin and thick-lazy provisioning, for a total of 10 disks.
+    1.  Clones a VM from a template and adds 10 additional disks with alternating
+        thin and thick-lazy provisioning, for a total of 11 disks.
     2.  Executes the migration using copy-offload (cold migration).
-    3.  Verifies that the migrated VM in OpenShift has the correct total number of disks (10).
+    3.  Verifies that the migrated VM in OpenShift has the correct total number of disks (11).
     """
     # Get copy-offload configuration
     copyoffload_config_data = source_provider_data["copyoffload"]
@@ -1656,7 +1656,7 @@ def test_copyoffload_10_mixed_disks_migration(
         vm_ssh_connections=vm_ssh_connections,
     )
 
-    # Verify that the correct number of disks were migrated (10 disks)
+    # Verify that the correct number of disks were migrated (11 disks)
     verify_vm_disk_count(destination_provider=destination_provider, plan=plan, target_namespace=target_namespace)
 
 

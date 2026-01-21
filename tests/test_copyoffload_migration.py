@@ -1598,6 +1598,7 @@ class TestCopyoffload10MixedDisksMigration:
 
 
 @pytest.mark.copyoffload
+@pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_large_vm_migration"])],

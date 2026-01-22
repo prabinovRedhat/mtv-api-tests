@@ -177,17 +177,8 @@ class TestCopyoffloadThinMigration:
         )
 
 
-@pytest.mark.copyoffload
-@pytest.mark.incremental
-@pytest.mark.parametrize(
-    "class_plan_config",
-    [pytest.param(py_config["tests_params"]["test_copyoffload_thin_snapshots_migration"])],
-    indirect=True,
-    ids=["copyoffload-thin-snapshots"],
-)
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
-class TestCopyoffloadThinSnapshotsMigration:
-    """Copy-offload migration test - thin disk with snapshots."""
+class CopyoffloadSnapshotBase:
+    """Base class for copy-offload migration tests with snapshots."""
 
     storage_map: StorageMap
     network_map: NetworkMap
@@ -207,7 +198,7 @@ class TestCopyoffloadThinSnapshotsMigration:
     ):
         """Create StorageMap with copy-offload configuration after creating snapshots."""
         if source_provider.type != Provider.ProviderType.VSPHERE:
-            pytest.skip("Thin disk + snapshots copy-offload test is only applicable to vSphere source providers")
+            pytest.skip("Snapshots copy-offload test is only applicable to vSphere source providers")
 
         vm_cfg = prepared_plan["virtual_machines"][0]
         provider_vm_api = prepared_plan["source_vms_data"][vm_cfg["name"]]["provider_vm_api"]
@@ -223,190 +214,7 @@ class TestCopyoffloadThinSnapshotsMigration:
             source_provider.create_snapshot(
                 vm=provider_vm_api,
                 name=f"{snapshot_prefix}-{idx}",
-                description="mtv-api-tests copy-offload thin snapshots migration test",
-                memory=False,
-                quiesce=False,
-                wait_timeout=60 * 10,
-            )
-
-        # Refresh and store snapshots list for post-migration snapshot checks
-        vm_cfg["snapshots_before_migration"] = source_provider.vm_dict(provider_vm_api=provider_vm_api)[
-            "snapshots_data"
-        ]
-        assert len(vm_cfg["snapshots_before_migration"]) >= snapshots_to_create, (
-            f"Expected at least {snapshots_to_create} snapshots, got {len(vm_cfg['snapshots_before_migration'])}"
-        )
-
-        # Cold migration expects VM powered off
-        source_provider.stop_vm(provider_vm_api)
-
-        copyoffload_config_data = source_provider_data["copyoffload"]
-        storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
-        datastore_id = copyoffload_config_data["datastore_id"]
-        storage_class = py_config["storage_class"]
-
-        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
-
-        offload_plugin_config = {
-            "vsphereXcopyConfig": {
-                "secretRef": copyoffload_storage_secret.name,
-                "storageVendorProduct": storage_vendor_product,
-            }
-        }
-
-        self.__class__.storage_map = get_storage_migration_map(
-            fixture_store=fixture_store,
-            target_namespace=target_namespace,
-            source_provider=source_provider,
-            destination_provider=destination_provider,
-            ocp_admin_client=ocp_admin_client,
-            source_provider_inventory=source_provider_inventory,
-            vms=vms_names,
-            storage_class=storage_class,
-            datastore_id=datastore_id,
-            offload_plugin_config=offload_plugin_config,
-            access_mode="ReadWriteOnce",
-            volume_mode="Block",
-        )
-        assert self.storage_map, "StorageMap creation failed"
-
-    def test_create_networkmap(
-        self,
-        prepared_plan,
-        fixture_store,
-        ocp_admin_client,
-        source_provider,
-        destination_provider,
-        source_provider_inventory,
-        target_namespace,
-        multus_network_name,
-    ):
-        """Create NetworkMap resource."""
-        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
-        self.__class__.network_map = get_network_migration_map(
-            fixture_store=fixture_store,
-            source_provider=source_provider,
-            destination_provider=destination_provider,
-            source_provider_inventory=source_provider_inventory,
-            ocp_admin_client=ocp_admin_client,
-            multus_network_name=multus_network_name,
-            target_namespace=target_namespace,
-            vms=vms_names,
-        )
-        assert self.network_map, "NetworkMap creation failed"
-
-    def test_create_plan(
-        self,
-        prepared_plan,
-        fixture_store,
-        ocp_admin_client,
-        source_provider,
-        destination_provider,
-        target_namespace,
-        source_provider_inventory,
-    ):
-        """Create MTV Plan CR resource."""
-        for vm in prepared_plan["virtual_machines"]:
-            vm_name = vm["name"]
-            vm_data = source_provider_inventory.get_vm(vm_name)
-            vm["id"] = vm_data["id"]
-
-        self.__class__.plan_resource = create_plan_resource(
-            ocp_admin_client=ocp_admin_client,
-            fixture_store=fixture_store,
-            source_provider=source_provider,
-            destination_provider=destination_provider,
-            storage_map=self.storage_map,
-            network_map=self.network_map,
-            virtual_machines_list=prepared_plan["virtual_machines"],
-            target_namespace=target_namespace,
-            warm_migration=prepared_plan.get("warm_migration", False),
-            copyoffload=prepared_plan.get("copyoffload", False),
-        )
-        assert self.plan_resource, "Plan creation failed"
-
-    def test_migrate_vms(self, fixture_store, ocp_admin_client, target_namespace):
-        """Execute migration."""
-        execute_migration(
-            ocp_admin_client=ocp_admin_client,
-            fixture_store=fixture_store,
-            plan=self.plan_resource,
-            target_namespace=target_namespace,
-        )
-
-    def test_check_vms(
-        self,
-        prepared_plan,
-        source_provider,
-        destination_provider,
-        source_provider_data,
-        target_namespace,
-        source_vms_namespace,
-        source_provider_inventory,
-        vm_ssh_connections,
-    ):
-        """Validate migrated VMs."""
-        check_vms(
-            plan=prepared_plan,
-            source_provider=source_provider,
-            destination_provider=destination_provider,
-            destination_namespace=target_namespace,
-            network_map_resource=self.network_map,
-            storage_map_resource=self.storage_map,
-            source_provider_data=source_provider_data,
-            source_vms_namespace=source_vms_namespace,
-            source_provider_inventory=source_provider_inventory,
-            vm_ssh_connections=vm_ssh_connections,
-        )
-
-
-@pytest.mark.copyoffload
-@pytest.mark.incremental
-@pytest.mark.parametrize(
-    "class_plan_config",
-    [pytest.param(py_config["tests_params"]["test_copyoffload_2tb_vm_snapshots_migration"])],
-    indirect=True,
-    ids=["copyoffload-2tb-vm-snapshots"],
-)
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
-class TestCopyoffload2TbVmSnapshotsMigration:
-    """Copy-offload migration test - 2TB VM with snapshots."""
-
-    storage_map: StorageMap
-    network_map: NetworkMap
-    plan_resource: Plan
-
-    def test_create_storagemap(
-        self,
-        prepared_plan,
-        fixture_store,
-        ocp_admin_client,
-        source_provider,
-        destination_provider,
-        source_provider_inventory,
-        target_namespace,
-        source_provider_data,
-        copyoffload_storage_secret,
-    ):
-        """Create StorageMap with copy-offload configuration after creating snapshots."""
-        if source_provider.type != Provider.ProviderType.VSPHERE:
-            pytest.skip("2TB VM + snapshots copy-offload test is only applicable to vSphere source providers")
-
-        vm_cfg = prepared_plan["virtual_machines"][0]
-        provider_vm_api = prepared_plan["source_vms_data"][vm_cfg["name"]]["provider_vm_api"]
-
-        # Ensure VM is powered on for snapshot creation
-        source_provider.start_vm(provider_vm_api)
-        source_provider.wait_for_vmware_guest_info(provider_vm_api, timeout=60)
-
-        snapshots_to_create = int(vm_cfg["snapshots"])
-        snapshot_prefix = f"{vm_cfg['name']}-{fixture_store['session_uuid']}-snapshot"
-
-        for idx in range(1, snapshots_to_create + 1):
-            source_provider.create_snapshot(
-                vm=provider_vm_api,
-                name=f"{snapshot_prefix}-{idx}",
-                description="mtv-api-tests copy-offload 2TB VM snapshots migration test",
+                description="mtv-api-tests copy-offload snapshots migration test",
                 memory=False,
                 quiesce=False,
                 wait_timeout=60 * 10,
@@ -544,6 +352,32 @@ class TestCopyoffload2TbVmSnapshotsMigration:
         verify_vm_disk_count(
             destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
         )
+
+
+@pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_thin_snapshots_migration"])],
+    indirect=True,
+    ids=["copyoffload-thin-snapshots"],
+)
+@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+class TestCopyoffloadThinSnapshotsMigration(CopyoffloadSnapshotBase):
+    """Copy-offload migration test - thin disk with snapshots."""
+
+
+@pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_2tb_vm_snapshots_migration"])],
+    indirect=True,
+    ids=["copyoffload-2tb-vm-snapshots"],
+)
+@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+class TestCopyoffload2TbVmSnapshotsMigration(CopyoffloadSnapshotBase):
+    """Copy-offload migration test - 2TB VM with snapshots."""
 
 
 @pytest.mark.copyoffload

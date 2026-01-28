@@ -107,7 +107,7 @@ class OCPProvider(BaseProvider):
         if vm_api.ready:
             vm_api.stop(vmi_delete_timeout=600, wait=True)
 
-    def vm_dict(self, wait_for_guest_agent: bool = False, **kwargs: Any) -> dict[str, Any]:
+    def vm_dict(self, wait_for_guest_agent: bool = False, guest_agent_timeout: int = 301, **kwargs: Any) -> dict[str, Any]:
         if not self.ocp_resource:
             raise ValueError("Missing `ocp_resource`")
 
@@ -192,7 +192,9 @@ class OCPProvider(BaseProvider):
         self.start_vm(cnv_vm)
         # True guest agent is reporting all ok
         result_vm_info["guest_agent_running"] = (
-            self.wait_for_cnv_vm_guest_agent(vm_dict=result_vm_info) if wait_for_guest_agent else False
+            self.wait_for_cnv_vm_guest_agent(vm_dict=result_vm_info, timeout=guest_agent_timeout)
+            if wait_for_guest_agent
+            else False
         )
 
         # Node name - where the VM is scheduled (collected after VM start)

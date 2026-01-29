@@ -107,7 +107,9 @@ class OCPProvider(BaseProvider):
         if vm_api.ready:
             vm_api.stop(vmi_delete_timeout=600, wait=True)
 
-    def vm_dict(self, wait_for_guest_agent: bool = False, guest_agent_timeout: int = 301, **kwargs: Any) -> dict[str, Any]:
+    def vm_dict(
+        self, wait_for_guest_agent: bool = False, guest_agent_timeout: int = 301, **kwargs: Any
+    ) -> dict[str, Any]:
         if not self.ocp_resource:
             raise ValueError("Missing `ocp_resource`")
 

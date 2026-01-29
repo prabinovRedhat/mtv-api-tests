@@ -5,6 +5,7 @@ import copy
 import ipaddress
 from typing import TYPE_CHECKING, Any, Literal, Self
 
+import shortuuid
 from kubernetes.client.exceptions import ApiException
 from ocp_resources.provider import Provider
 from ocp_resources.resource import Resource, ResourceEditor
@@ -230,7 +231,16 @@ class VMWareProvider(BaseProvider):
         session_uuid: str = "",
         clone_options: dict | None = None,
     ) -> vim.VirtualMachine:
-        target_vm_name = f"{query}{vm_name_suffix}"
+        # Determine target VM name with clone_name precedence:
+        # 1. If clone_options contains a non-empty clone_name, use that (allows custom VM names for testing)
+        # 2. Otherwise, fall back to default naming: query + vm_name_suffix
+        clone_options = clone_options or {}
+        clone_name = clone_options.get("clone_name")
+        if isinstance(clone_name, str) and clone_name.strip():
+            target_vm_name = clone_name
+        else:
+            target_vm_name = f"{query}{vm_name_suffix}"
+
         target_vm = None
         try:
             target_vm = self.get_obj(vimtype=[vim.VirtualMachine], name=target_vm_name)
@@ -239,13 +249,17 @@ class VMWareProvider(BaseProvider):
                 # Use copyoffload datastore and host if configured
                 target_datastore_id = self.copyoffload_config.get("datastore_id")
                 target_esxi_host = self.copyoffload_config.get("esxi_host")
+
+                # Remove clone_name from options before passing to clone_vm
+                clone_vm_options = {k: v for k, v in clone_options.items() if k != "clone_name"}
+
                 target_vm = self.clone_vm(
                     source_vm_name=query,
                     clone_vm_name=target_vm_name,
                     session_uuid=session_uuid,
                     target_datastore_id=target_datastore_id,
                     target_esxi_host=target_esxi_host,
-                    **(clone_options or {}),
+                    **clone_vm_options,
                 )
                 if not target_vm:
                     raise VmNotFoundError(
@@ -1023,27 +1037,57 @@ class VMWareProvider(BaseProvider):
             power_on: Whether to power on the VM after cloning. Defaults to False.
             regenerate_mac: Whether to regenerate MAC addresses for network interfaces.
                           Prevents MAC address conflicts between cloned VMs. Default: True.
-            **kwargs: Additional keyword arguments for cloning options.
-                add_disks (list[dict]): A list of dictionaries, where each dict
+            **kwargs: Additional keyword arguments for cloning options:
+                - add_disks (list[dict], optional): A list of dictionaries, where each dict
                     defines a new disk to be added to the cloned VM.
-                    Supported keys for each disk:
-                    - 'size_gb' (int): The size of the disk in gigabytes.
-                    - 'provision_type' (str): 'thin', 'thick-lazy', or 'thick-eager'.
-                    - 'disk_mode' (str): e.g., 'persistent', 'independent_persistent'.
-                    - 'datastore_path' (str, optional): A custom folder path on the datastore
-                                        where the disk's .vmdk file should be placed.
-                                        E.g., "shared_disks". If not provided, defaults
-                                        to the VM's main folder.
-                target_datastore_id (str, optional): The MoRef ID of the specific datastore
-                                        to use for the cloned VM and all its disks.
-                                        If not provided, defaults to the source VM's datastore.
+                    Supported keys for each disk dict:
+                      * 'size_gb' (int): The size of the disk in gigabytes.
+                      * 'provision_type' (str): 'thin', 'thick-lazy', or 'thick-eager'.
+                      * 'disk_mode' (str): e.g., 'persistent', 'independent_persistent'.
+                      * 'datastore_path' (str, optional): A custom folder path on the datastore
+                          where the disk's .vmdk file should be placed.
+                          E.g., "shared_disks". If not provided, defaults to the VM's main folder.
+                - target_datastore_id (str, optional): The MoRef ID of the specific datastore
+                    to use for the cloned VM and all its disks.
+                    If not provided, defaults to the source VM's datastore.
+                - preserve_name_format (bool, optional): Whether to preserve the original clone_vm_name
+                    format (e.g., capitals, underscores) instead of the default
+                    sanitization. Used for testing non-conforming name handling.
+                    Defaults to False.
 
         Returns:
             vim.VirtualMachine: The cloned VM object.
 
+        Raises:
+            ValueError: If the session_uuid is too long to build a valid clone name within
+                      63 characters when preserve_name_format is True.
+            VmCloneError: If the datastore or resource pool cannot be determined, or if
+                        cloning fails.
+
         """
-        clone_vm_name = self._generate_clone_vm_name(session_uuid=session_uuid, base_name=clone_vm_name)
-        LOGGER.info("Starting clone process for '%s' from '%s'", clone_vm_name, source_vm_name)
+        # Check if we should preserve the original name format (for non-conforming name tests)
+        preserve_name_format = kwargs.get("preserve_name_format", False)
+        if preserve_name_format:
+            # Keep the original name format with capitals and underscores, just add UUID suffix
+            random_suffix = shortuuid.ShortUUID().random(length=4).lower()
+            prefix = f"{session_uuid}-"
+            suffix = f"-{random_suffix}"
+            base = clone_vm_name
+            max_base_len = 63 - len(prefix) - len(suffix)
+            if max_base_len < 1:
+                raise ValueError(f"Cannot build clone VM name within 63 characters. session_uuid='{session_uuid}'")
+            if len(prefix + base + suffix) > 63:
+                LOGGER.warning(
+                    "VM name '%s' is too long (%s > 63). Truncating base name.",
+                    prefix + base + suffix,
+                    len(prefix + base + suffix),
+                )
+                base = base[:max_base_len].rstrip("-")
+            clone_vm_name = f"{prefix}{base}{suffix}"
+            LOGGER.info("Preserving original name format: '%s'", clone_vm_name)
+        else:
+            clone_vm_name = self._generate_clone_vm_name(session_uuid=session_uuid, base_name=clone_vm_name)
+        LOGGER.info(f"Starting clone process for '{clone_vm_name}' from '{source_vm_name}'")
 
         source_vm = self.get_obj([vim.VirtualMachine], source_vm_name)
 

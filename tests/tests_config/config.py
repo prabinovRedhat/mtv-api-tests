@@ -19,7 +19,6 @@ tests_params: dict = {
                 "name": "mtv-tests-rhel8",
                 "source_vm_power": "on",
                 "guest_agent": True,
-                "add_disks": [],
             },
         ],
         "warm_migration": True,
@@ -30,7 +29,6 @@ tests_params: dict = {
                 "name": "mtv-rhel8-warm-2disks2nics",
                 "source_vm_power": "on",
                 "guest_agent": True,
-                "add_disks": [],
             },
         ],
         "warm_migration": True,
@@ -41,23 +39,21 @@ tests_params: dict = {
                 "name": "mtv-tests-rhel8",
                 "source_vm_power": "on",
                 "guest_agent": True,
-                "add_disks": [],
             },
         ],
         "warm_migration": True,
     },
     "test_sanity_cold_mtv_migration": {
         "virtual_machines": [
-            {"name": "mtv-tests-rhel8", "guest_agent": True, "add_disks": []},
+            {"name": "mtv-tests-rhel8", "guest_agent": True},
         ],
         "warm_migration": False,
     },
     "test_cold_remote_ocp": {
         "virtual_machines": [
-            {"name": "mtv-tests-rhel8", "add_disks": []},
+            {"name": "mtv-tests-rhel8"},
             {
                 "name": "mtv-win2019-79",
-                "add_disks": [],
             },
         ],
         "warm_migration": False,

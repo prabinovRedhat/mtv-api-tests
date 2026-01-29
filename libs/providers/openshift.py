@@ -108,8 +108,19 @@ class OCPProvider(BaseProvider):
             vm_api.stop(vmi_delete_timeout=600, wait=True)
 
     def vm_dict(
-        self, wait_for_guest_agent: bool = False, guest_agent_timeout: int = 301, **kwargs: Any
+        self, *, wait_for_guest_agent: bool = False, guest_agent_timeout: int = 301, **kwargs: Any
     ) -> dict[str, Any]:
+        """
+        Create a dict for a single vm holding the Network Interface details, Disks and Storage, etc.
+
+        Args:
+            wait_for_guest_agent (bool): Whether to wait for the guest agent to be ready.
+            guest_agent_timeout (int): Timeout in seconds to wait for the guest agent.
+            **kwargs: Additional arguments (e.g., name, namespace, source, vm_name_suffix).
+
+        Returns:
+            dict[str, Any]: VM information dictionary.
+        """
         if not self.ocp_resource:
             raise ValueError("Missing `ocp_resource`")
 

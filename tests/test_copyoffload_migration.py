@@ -2701,7 +2701,6 @@ class TestCopyoffloadScaleMigration:
             plan=prepared_plan,
             source_provider=source_provider,
             destination_provider=destination_provider,
-            destination_namespace=target_namespace,
             network_map_resource=self.network_map,
             storage_map_resource=self.storage_map,
             source_provider_data=source_provider_data,

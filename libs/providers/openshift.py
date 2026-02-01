@@ -120,6 +120,10 @@ class OCPProvider(BaseProvider):
 
         Returns:
             dict[str, Any]: VM information dictionary.
+
+        Raises:
+            ValueError: If `ocp_resource` is not set.
+            InvalidVMNameError: If destination VM name fails Kubernetes validation.
         """
         if not self.ocp_resource:
             raise ValueError("Missing `ocp_resource`")

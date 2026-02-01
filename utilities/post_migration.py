@@ -1142,7 +1142,7 @@ def check_vms(
         vm_kwargs = {
             "wait_for_guest_agent": vm_guest_agent,
             "name": vm_name,
-            "namespace": destination_namespace,
+            "namespace": vm_namespace,
         }
         if (guest_agent_timeout := plan.get("guest_agent_timeout")) is not None:
             vm_kwargs["guest_agent_timeout"] = guest_agent_timeout

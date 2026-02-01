@@ -1139,16 +1139,14 @@ def check_vms(
             source_provider_inventory=source_provider_inventory,
         )
         vm_guest_agent = vm.get("guest_agent")
-        destination_vm = destination_provider.vm_dict(
-<<<<<<< HEAD
-            wait_for_guest_agent=vm_guest_agent, name=vm_name, namespace=vm_namespace
-=======
-            wait_for_guest_agent=vm_guest_agent,
-            guest_agent_timeout=plan.get("guest_agent_timeout", 301),
-            name=vm_name,
-            namespace=destination_namespace,
->>>>>>> 946e17e (feat: Add copyoffload scale migration test)
-        )
+        vm_kwargs = {
+            "wait_for_guest_agent": vm_guest_agent,
+            "name": vm_name,
+            "namespace": destination_namespace,
+        }
+        if (guest_agent_timeout := plan.get("guest_agent_timeout")) is not None:
+            vm_kwargs["guest_agent_timeout"] = guest_agent_timeout
+        destination_vm = destination_provider.vm_dict(**vm_kwargs)
 
         try:
             check_vms_power_state(

@@ -2568,7 +2568,7 @@ class TestCopyoffloadWarmMigration:
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_scale_migration"])],
     indirect=True,
-    ids=["copyoffload-scale"],
+    ids=["MTV-572:copyoffload-scale"],
 )
 @pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
 class TestCopyoffloadScaleMigration:

@@ -3184,7 +3184,8 @@ class TestSimultaneousCopyoffloadMigrations:
         verify_vm_disk_count(
             destination_provider=destination_provider, plan=prepared_plan_2, target_namespace=target_namespace
         )
-@pytest.mark.tier2
+
+
 @pytest.mark.copyoffload
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -3196,7 +3197,7 @@ class TestSimultaneousCopyoffloadMigrations:
 @pytest.mark.usefixtures("copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
 class TestConcurrentXcopyVddkMigration:
     """Test simultaneous execution of XCOPY and VDDK migration plans.
-    
+
     Plan 1: XCOPY based (copyoffload=True)
     Plan 2: VDDK based (copyoffload=False)
     """

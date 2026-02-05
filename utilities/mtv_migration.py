@@ -576,7 +576,7 @@ def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int 
         wait_timeout=timeout,
     ):
         current_statuses = sample
-        
+
         # Update executing state for each plan
         for plan in plan_list:
             status = current_statuses[plan.name]
@@ -584,7 +584,7 @@ def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int 
                 if not plans_executing[plan.name]:
                     LOGGER.info(f"Plan '{plan.name}' is now executing")
                 plans_executing[plan.name] = True
-            
+
             # Check for early completion failure
             elif status in (Plan.Status.SUCCEEDED, Plan.Status.FAILED):
                 if not all_executing:

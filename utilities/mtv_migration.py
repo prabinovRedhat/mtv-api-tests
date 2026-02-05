@@ -555,6 +555,9 @@ def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int 
         plan_list: List of Plan resources to monitor.
         timeout: Timeout in seconds to wait for simultaneous execution.
 
+    Returns:
+        None
+
     Raises:
         AssertionError: If plans do not execute simultaneously or if any plan completes early.
     """

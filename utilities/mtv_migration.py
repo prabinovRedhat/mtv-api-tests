@@ -314,7 +314,15 @@ def get_plan_migration_status(plan: Plan) -> str:
     Returns:
         str: The status of the plan ("Executing", "Succeeded", or "Failed").
     """
-    for cond in plan.instance.status.conditions:
+    status = getattr(plan.instance, "status", None)
+    if not status:
+        return "Executing"
+
+    conditions = getattr(status, "conditions", None)
+    if not conditions:
+        return "Executing"
+
+    for cond in conditions:
         if cond["category"] == "Advisory" and cond["status"] == Plan.Condition.Status.TRUE:
             cond_type = cond["type"]
 

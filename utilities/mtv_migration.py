@@ -581,36 +581,35 @@ def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int 
                     return cond_type
         return "Executing"
 
-    for current_statuses in TimeoutSampler(
-        func=lambda: {plan.name: _check_plan_status(plan) for plan in plan_list},
-        sleep=2,
-        wait_timeout=timeout,
-    ):
-        # Update executing state for each plan
-        for plan in plan_list:
-            status = current_statuses[plan.name]
-            if status == "Executing":
-                if not plans_executing[plan.name]:
-                    LOGGER.info(f"Plan '{plan.name}' is now executing")
-                plans_executing[plan.name] = True
-                continue
+    try:
+        for current_statuses in TimeoutSampler(
+            func=lambda: {plan.name: _check_plan_status(plan) for plan in plan_list},
+            sleep=2,
+            wait_timeout=timeout,
+        ):
+            # Update executing state for each plan
+            for plan in plan_list:
+                status = current_statuses[plan.name]
+                if status == "Executing":
+                    if not plans_executing[plan.name]:
+                        LOGGER.info(f"Plan '{plan.name}' is now executing")
+                    plans_executing[plan.name] = True
+                    continue
 
-            # Check for early completion failure
-            elif status in (Plan.Status.SUCCEEDED, Plan.Status.FAILED):
-                if not all_executing:
-                    # Construct error message with status of all plans
-                    status_msg = ", ".join([f"{name}: {stat}" for name, stat in current_statuses.items()])
-                    raise AssertionError(
-                        f"Plan {plan.name} reached {status} before all plans were executing simultaneously. "
-                        f"Statuses: {status_msg}"
-                    )
+                # Check for early completion failure
+                elif status in (Plan.Status.SUCCEEDED, Plan.Status.FAILED):
+                    if not all_executing:
+                        # Construct error message with status of all plans
+                        status_msg = ", ".join([f"{name}: {stat}" for name, stat in current_statuses.items()])
+                        raise AssertionError(
+                            f"Plan {plan.name} reached {status} before all plans were executing simultaneously. "
+                            f"Statuses: {status_msg}"
+                        )
 
-        # Check if all plans are executing
-        if all(plans_executing.values()):
-            if not all_executing:
+            # Check if all plans are executing
+            if all(plans_executing.values()):
                 LOGGER.info("SUCCESS: All migrations are executing simultaneously")
-                all_executing = True
-            break
+                return
 
-    if not all_executing:
+    except TimeoutExpiredError:
         raise AssertionError("Failed to validate all migrations executing simultaneously within timeout")

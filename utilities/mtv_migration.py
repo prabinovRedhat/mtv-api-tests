@@ -305,25 +305,34 @@ def get_vm_suffix(warm_migration: bool) -> str:
     return vm_suffix
 
 
+def get_plan_migration_status(plan: Plan) -> str:
+    """Get the migration status from the Plan conditions.
+
+    Args:
+        plan (Plan): The Plan resource to check.
+
+    Returns:
+        str: The status of the plan ("Executing", "Succeeded", or "Failed").
+    """
+    for cond in plan.instance.status.conditions:
+        if cond["category"] == "Advisory" and cond["status"] == Plan.Condition.Status.TRUE:
+            cond_type = cond["type"]
+
+            if cond_type in (Plan.Status.SUCCEEDED, Plan.Status.FAILED):
+                return cond_type
+
+    return "Executing"
+
+
 def wait_for_migration_complate(plan: Plan) -> None:
-    def _wait_for_migration_complate(_plan: Plan) -> str:
-        for cond in _plan.instance.status.conditions:
-            if cond["category"] == "Advisory" and cond["status"] == Plan.Condition.Status.TRUE:
-                cond_type = cond["type"]
-
-                if cond_type in (Plan.Status.SUCCEEDED, Plan.Status.FAILED):
-                    return cond_type
-
-        return "Executing"
-
     try:
         last_status: str = ""
 
         for sample in TimeoutSampler(
-            func=_wait_for_migration_complate,
+            func=get_plan_migration_status,
             sleep=1,
             wait_timeout=py_config.get("plan_wait_timeout", 600),
-            _plan=plan,
+            plan=plan,
         ):
             if sample != last_status:
                 LOGGER.info(f"Plan '{plan.name}' migration status: '{sample}'")
@@ -563,27 +572,10 @@ def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int 
     """
     LOGGER.info(f"Validating {len(plan_list)} migrations enter executing state simultaneously")
     plans_executing = {plan.name: False for plan in plan_list}
-    all_executing = False
-
-    def _check_plan_status(plan: Plan) -> str:
-        """Check the status of a migration plan.
-
-        Args:
-            plan (Plan): The Plan resource to check.
-
-        Returns:
-            str: The status of the plan ("Executing", "Succeeded", or "Failed").
-        """
-        for cond in plan.instance.status.conditions:
-            if cond["category"] == "Advisory" and cond["status"] == Plan.Condition.Status.TRUE:
-                cond_type = cond["type"]
-                if cond_type in (Plan.Status.SUCCEEDED, Plan.Status.FAILED):
-                    return cond_type
-        return "Executing"
 
     try:
         for current_statuses in TimeoutSampler(
-            func=lambda: {plan.name: _check_plan_status(plan) for plan in plan_list},
+            func=lambda: {plan.name: get_plan_migration_status(plan) for plan in plan_list},
             sleep=2,
             wait_timeout=timeout,
         ):
@@ -598,13 +590,12 @@ def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int 
 
                 # Check for early completion failure
                 elif status in (Plan.Status.SUCCEEDED, Plan.Status.FAILED):
-                    if not all_executing:
-                        # Construct error message with status of all plans
-                        status_msg = ", ".join([f"{name}: {stat}" for name, stat in current_statuses.items()])
-                        raise AssertionError(
-                            f"Plan {plan.name} reached {status} before all plans were executing simultaneously. "
-                            f"Statuses: {status_msg}"
-                        )
+                    # Construct error message with status of all plans
+                    status_msg = ", ".join([f"{name}: {stat}" for name, stat in current_statuses.items()])
+                    raise AssertionError(
+                        f"Plan {plan.name} reached {status} before all plans were executing simultaneously. "
+                        f"Statuses: {status_msg}"
+                    )
 
             # Check if all plans are executing
             if all(plans_executing.values()):
@@ -612,4 +603,4 @@ def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int 
                 return
 
     except TimeoutExpiredError:
-        raise AssertionError("Failed to validate all migrations executing simultaneously within timeout")
+        raise AssertionError("Failed to validate all migrations executing simultaneously within timeout") from None

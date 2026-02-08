@@ -566,6 +566,14 @@ def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int 
     all_executing = False
 
     def _check_plan_status(plan: Plan) -> str:
+        """Check the status of a migration plan.
+
+        Args:
+            plan (Plan): The Plan resource to check.
+
+        Returns:
+            str: The status of the plan ("Executing", "Succeeded", or "Failed").
+        """
         for cond in plan.instance.status.conditions:
             if cond["category"] == "Advisory" and cond["status"] == Plan.Condition.Status.TRUE:
                 cond_type = cond["type"]

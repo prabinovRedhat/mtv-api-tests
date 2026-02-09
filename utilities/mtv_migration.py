@@ -312,15 +312,15 @@ def get_plan_migration_status(plan: Plan) -> str:
         plan (Plan): The Plan resource to check.
 
     Returns:
-        str: The status of the plan ("Executing", "Succeeded", or "Failed").
+        str: The status of the plan ("Pending", "Executing", "Succeeded", or "Failed").
     """
     status = getattr(plan.instance, "status", None)
     if not status:
-        return "Executing"
+        return "Pending"
 
     conditions = getattr(status, "conditions", None)
     if not conditions:
-        return "Executing"
+        return "Pending"
 
     for cond in conditions:
         if cond["category"] == "Advisory" and cond["status"] == Plan.Condition.Status.TRUE:

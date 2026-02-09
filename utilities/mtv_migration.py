@@ -313,6 +313,9 @@ def get_plan_migration_status(plan: Plan) -> str:
 
     Returns:
         str: The status of the plan ("Pending", "Executing", "Succeeded", or "Failed").
+
+    Raises:
+        None
     """
     status = getattr(plan.instance, "status", None)
     if not status:

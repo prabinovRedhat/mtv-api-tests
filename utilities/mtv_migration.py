@@ -321,7 +321,7 @@ def get_plan_migration_status(plan: Plan) -> str:
     if not status:
         return ""
 
-    conditions = getattr(status, "conditions", None)
+    conditions = status.conditions
     if conditions:
         for cond in conditions:
             if cond["category"] == "Advisory" and cond["status"] == Plan.Condition.Status.TRUE:

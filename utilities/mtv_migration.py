@@ -312,27 +312,30 @@ def get_plan_migration_status(plan: Plan) -> str:
         plan (Plan): The Plan resource to check.
 
     Returns:
-        str: The status of the plan ("Pending", "Executing", "Succeeded", or "Failed").
+        str: The status of the plan ("Executing", "Succeeded", "Failed", or empty string if unknown).
 
     Raises:
         None
     """
-    status = getattr(plan.instance, "status", None)
+    status = plan.instance.status
     if not status:
-        return "Pending"
+        return ""
 
     conditions = getattr(status, "conditions", None)
-    if not conditions:
-        return "Pending"
+    if conditions:
+        for cond in conditions:
+            if cond["category"] == "Advisory" and cond["status"] == Plan.Condition.Status.TRUE:
+                cond_type = cond["type"]
 
-    for cond in conditions:
-        if cond["category"] == "Advisory" and cond["status"] == Plan.Condition.Status.TRUE:
-            cond_type = cond["type"]
+                if cond_type in (Plan.Status.SUCCEEDED, Plan.Status.FAILED):
+                    return cond_type
 
-            if cond_type in (Plan.Status.SUCCEEDED, Plan.Status.FAILED):
-                return cond_type
-
-    return "Executing"
+    # Check if Migration CR exists to confirm execution
+    try:
+        _find_migration_for_plan(plan)
+        return Plan.Status.EXECUTING
+    except MigrationNotFoundError:
+        return ""
 
 
 def wait_for_migration_complate(plan: Plan) -> None:
@@ -593,7 +596,7 @@ def wait_for_concurrent_migration_execution(plan_list: list[Plan], timeout: int 
             # Update executing state for each plan
             for plan in plan_list:
                 status = current_statuses[plan.name]
-                if status == "Executing":
+                if status == Plan.Status.EXECUTING:
                     if not plans_executing[plan.name]:
                         LOGGER.info(f"Plan '{plan.name}' is now executing")
                     plans_executing[plan.name] = True

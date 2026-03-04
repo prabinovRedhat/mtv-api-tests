@@ -112,16 +112,26 @@ def wait_for_cloud_init(
 
     try:
         # Wait for IP
-        if not source_provider.wait_for_vmware_guest_info(provider_vm_api, timeout=300):
+        if not source_provider.wait_for_vmware_guest_info(provider_vm_api, timeout=1000):
             raise AssertionError("Guest info not available")
 
-        # Get IP
-        vm_info = source_provider.vm_dict(provider_vm_api=provider_vm_api)
+        # Get IP with polling
         ip_address = None
-        for nic in vm_info.get("network_interfaces", []):
-            if nic.get("ip_addresses"):
-                ip_address = nic["ip_addresses"][0]["ip_address"]
-                break
+        
+        def _get_ip() -> str | None:
+            vm_info = source_provider.vm_dict(provider_vm_api=provider_vm_api)
+            for nic in vm_info.get("network_interfaces", []):
+                if nic.get("ip_addresses"):
+                    return nic["ip_addresses"][0]["ip_address"]
+            return None
+
+        try:
+            for ip in TimeoutSampler(wait_timeout=300, sleep=5, func=_get_ip):
+                if ip:
+                    ip_address = ip
+                    break
+        except TimeoutExpiredError:
+            pass
 
         if not ip_address:
             raise AssertionError("Could not find IP address for VM")
@@ -131,6 +141,7 @@ def wait_for_cloud_init(
         # Get credentials
         # Mock source_vm_info with just enough data for get_ssh_credentials_from_provider_config
         # It needs 'win_os' key.
+        vm_info = source_provider.vm_dict(provider_vm_api=provider_vm_api)
         source_vm_info = {"win_os": vm_info.get("win_os", False)}
         username, password = get_ssh_credentials_from_provider_config(source_provider_data, source_vm_info)
 

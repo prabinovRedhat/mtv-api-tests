@@ -88,7 +88,7 @@ def wait_for_cloud_init(
     vm_name: str,
     provider_vm_api: Any,
     file_name: str,
-    timeout: int = 600,
+    timeout: int = 2000,
     target_power_state: str = "off",
 ) -> None:
     """
@@ -100,7 +100,7 @@ def wait_for_cloud_init(
         vm_name: Name of the VM
         provider_vm_api: Provider VM object
         file_name: Full path to the file to check for (e.g., "/cloud-init.finish")
-        timeout: Timeout in seconds (default: 600)
+        timeout: Timeout in seconds (default: 2000)
         target_power_state: Desired power state after check ("on" or "off", default: "off")
 
     Raises:

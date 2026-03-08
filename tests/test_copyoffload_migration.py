@@ -72,16 +72,18 @@ def _wait_for_cloud_init_all_vms(
     for vm_data in prepared_plan["virtual_machines"]:
         vm_name = vm_data["name"]
         provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-        source_vm_power = vm_data.get("source_vm_power", "off")
 
-        wait_for_cloud_init(
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-            vm_name=vm_name,
-            provider_vm_api=provider_vm_api,
-            file_name="/cloud-init.finish",
-            target_power_state=source_vm_power,
-        )
+        cloud_init_kwargs: dict[str, Any] = {
+            "source_provider": source_provider,
+            "source_provider_data": source_provider_data,
+            "vm_name": vm_name,
+            "provider_vm_api": provider_vm_api,
+            "file_name": "/cloud-init.finish",
+        }
+        if "source_vm_power" in vm_data:
+            cloud_init_kwargs["target_power_state"] = vm_data["source_vm_power"]
+
+        wait_for_cloud_init(**cloud_init_kwargs)
 
 
 @pytest.mark.copyoffload

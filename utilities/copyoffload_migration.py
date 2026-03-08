@@ -108,7 +108,7 @@ def wait_for_cloud_init(
 
     Raises:
         TimeoutExpiredError: If cloud-init does not finish within timeout
-        AssertionError: If guest info or IP address is missing
+        ValueError: If guest info or IP address is unavailable
     """
     LOGGER.info(f"Powering on VM {vm_name} to check cloud-init status")
     source_provider.start_vm(provider_vm_api)
@@ -116,7 +116,7 @@ def wait_for_cloud_init(
     try:
         # Wait for IP
         if not source_provider.wait_for_vmware_guest_info(provider_vm_api, timeout=1000):
-            raise AssertionError("Guest info not available")
+            raise ValueError(f"Guest info not available for VM '{vm_name}'")
 
         # Get IP with polling
         ip_address = None
@@ -137,7 +137,7 @@ def wait_for_cloud_init(
             pass
 
         if not ip_address:
-            raise AssertionError("Could not find IP address for VM")
+            raise ValueError(f"Could not find IP address for VM '{vm_name}'")
 
         LOGGER.info(f"VM {vm_name} has IP: {ip_address}")
 

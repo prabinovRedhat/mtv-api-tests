@@ -6,6 +6,8 @@ vsphere-xcopy-volume-populator to migrate VMs with shared storage between
 vSphere and OpenShift environments.
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -65,9 +67,12 @@ def _wait_for_cloud_init_all_vms(
         source_provider (VMWareProvider): Source VMware provider instance
         source_provider_data (dict[str, Any]): Source provider configuration data
 
+    Returns:
+        None
+
     Raises:
         TimeoutExpiredError: If cloud-init does not finish within timeout
-        AssertionError: If guest info or IP address is unavailable
+        ValueError: If guest info or IP address is unavailable
     """
     for vm_data in prepared_plan["virtual_machines"]:
         vm_name = vm_data["name"]

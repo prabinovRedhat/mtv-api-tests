@@ -19,7 +19,7 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 from utilities.post_migration import get_ssh_credentials_from_provider_config
 
 if TYPE_CHECKING:
-    from libs.base_provider import BaseProvider
+    from libs.providers.vmware import VMWareProvider
 
 LOGGER = get_logger(__name__)
 
@@ -83,7 +83,7 @@ def wait_for_plan_secret(ocp_admin_client: DynamicClient, namespace: str, plan_n
 
 
 def wait_for_cloud_init(
-    source_provider: BaseProvider,
+    source_provider: VMWareProvider,
     source_provider_data: dict[str, Any],
     vm_name: str,
     provider_vm_api: Any,

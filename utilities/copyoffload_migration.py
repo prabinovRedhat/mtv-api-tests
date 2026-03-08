@@ -120,10 +120,12 @@ def wait_for_cloud_init(
 
         # Get IP with polling
         ip_address = None
+        last_vm_info: dict[str, Any] = {}
 
         def _get_ip() -> str | None:
-            vm_info = source_provider.vm_dict(provider_vm_api=provider_vm_api)
-            for nic in vm_info.get("network_interfaces", []):
+            nonlocal last_vm_info
+            last_vm_info = source_provider.vm_dict(provider_vm_api=provider_vm_api)
+            for nic in last_vm_info.get("network_interfaces", []):
                 if nic.get("ip_addresses"):
                     return nic["ip_addresses"][0]["ip_address"]
             return None
@@ -142,10 +144,7 @@ def wait_for_cloud_init(
         LOGGER.info(f"VM {vm_name} has IP: {ip_address}")
 
         # Get credentials
-        # Mock source_vm_info with just enough data for get_ssh_credentials_from_provider_config
-        # It needs 'win_os' key.
-        vm_info = source_provider.vm_dict(provider_vm_api=provider_vm_api)
-        source_vm_info = {"win_os": vm_info.get("win_os", False)}
+        source_vm_info = {"win_os": last_vm_info.get("win_os", False)}
         username, password = get_ssh_credentials_from_provider_config(source_provider_data, source_vm_info)
 
         host = Host(ip_address)

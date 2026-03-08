@@ -171,6 +171,9 @@ def wait_for_cloud_init(
     finally:
         if target_power_state == "off":
             LOGGER.info(f"Powering off VM - {vm_name}")
-            source_provider.stop_vm(provider_vm_api)
+            try:
+                source_provider.stop_vm(provider_vm_api)
+            except Exception as e:
+                LOGGER.warning(f"Failed to power off VM '{vm_name}': {type(e).__name__}: {e}")
         else:
             LOGGER.info(f"Leaving VM {vm_name} powered on")

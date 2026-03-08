@@ -117,7 +117,7 @@ def wait_for_cloud_init(
 
         # Get IP with polling
         ip_address = None
-        
+
         def _get_ip() -> str | None:
             vm_info = source_provider.vm_dict(provider_vm_api=provider_vm_api)
             for nic in vm_info.get("network_interfaces", []):

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from kubernetes.dynamic import DynamicClient
 from ocp_resources.secret import Secret
-from rrmngmnt import Host, User
+from rrmngmnt import Host, RootUser, User
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
@@ -149,11 +149,11 @@ def wait_for_cloud_init(
         username, password = get_ssh_credentials_from_provider_config(source_provider_data, source_vm_info)
 
         host = Host(ip_address)
-        host.users.append(User(username, password))
+        user = RootUser(password) if username == "root" else User(username, password)
 
         def _check_file() -> bool:
             try:
-                rc, _, _ = host.executor().run_cmd(["ls", file_name])
+                rc, _, _ = host.executor(user=user).run_cmd(["ls", file_name])
                 return rc == 0
             except Exception as e:
                 LOGGER.warning(f"SSH check failed for {vm_name}: {type(e).__name__}: {e} - retrying...")

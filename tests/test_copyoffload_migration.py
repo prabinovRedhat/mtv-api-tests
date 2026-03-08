@@ -2984,16 +2984,18 @@ class TestSimultaneousCopyoffloadMigrations:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan: dict[str, Any],
+        prepared_plan_1: dict[str, Any],
+        prepared_plan_2: dict[str, Any],
         source_provider: VMWareProvider,
         source_provider_data: dict[str, Any],
     ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
+        """Wait for cloud-init to finish on VMs from both plans."""
+        for plan in (prepared_plan_1, prepared_plan_2):
+            _wait_for_cloud_init_all_vms(
+                prepared_plan=plan,
+                source_provider=source_provider,
+                source_provider_data=source_provider_data,
+            )
 
     def test_create_storagemap_plan1(
         self,
@@ -3468,16 +3470,18 @@ class TestConcurrentXcopyVddkMigration:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan: dict[str, Any],
+        prepared_plan_1: dict[str, Any],
+        prepared_plan_2: dict[str, Any],
         source_provider: VMWareProvider,
         source_provider_data: dict[str, Any],
     ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
+        """Wait for cloud-init to finish on VMs from both plans."""
+        for plan in (prepared_plan_1, prepared_plan_2):
+            _wait_for_cloud_init_all_vms(
+                prepared_plan=plan,
+                source_provider=source_provider,
+                source_provider_data=source_provider_data,
+            )
 
     def test_create_storagemap_xcopy(
         self,

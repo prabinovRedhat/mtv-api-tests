@@ -12,6 +12,7 @@ import pytest
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
+    from libs.providers.vmware import VMWareProvider
 
 from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
@@ -49,6 +50,40 @@ EARLY_COMPLETION_MSG = (
 )
 
 
+def _wait_for_cloud_init_all_vms(
+    prepared_plan: dict[str, Any],
+    source_provider: "VMWareProvider",
+    source_provider_data: dict[str, Any],
+) -> None:
+    """Wait for cloud-init to finish on all VMs in the plan.
+
+    Iterates over all VMs in the plan and waits for each to signal
+    cloud-init completion via the presence of ``/cloud-init.finish``.
+
+    Args:
+        prepared_plan (dict[str, Any]): Processed plan config with VM data
+        source_provider (VMWareProvider): Source VMware provider instance
+        source_provider_data (dict[str, Any]): Source provider configuration data
+
+    Raises:
+        TimeoutExpiredError: If cloud-init does not finish within timeout
+        AssertionError: If guest info or IP address is unavailable
+    """
+    for vm_data in prepared_plan["virtual_machines"]:
+        vm_name = vm_data["name"]
+        provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
+        source_vm_power = vm_data.get("source_vm_power", "off")
+
+        wait_for_cloud_init(
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+            vm_name=vm_name,
+            provider_vm_api=provider_vm_api,
+            file_name="/cloud-init.finish",
+            target_power_state=source_vm_power,
+        )
+
+
 @pytest.mark.copyoffload
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -67,26 +102,16 @@ class TestCopyoffloadThinMigration:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap(
         self,
@@ -229,26 +254,16 @@ class CopyoffloadSnapshotBase:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap(
         self,
@@ -462,26 +477,16 @@ class TestCopyoffloadThickLazyMigration:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap(
         self,
@@ -633,26 +638,16 @@ class TestCopyoffloadMultiDiskMigration:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap(
         self,
@@ -807,26 +802,16 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap(
         self,
@@ -981,26 +966,16 @@ class TestCopyoffloadRdmVirtualDiskMigration:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap(
         self,
@@ -1159,26 +1134,16 @@ class TestCopyoffloadMultiDatastoreMigration:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap(
         self,
@@ -1352,26 +1317,16 @@ class TestCopyoffloadMixedDatastoreMigration:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap(
         self,
@@ -1547,26 +1502,16 @@ class TestCopyoffloadFallbackLargeMigration:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap(
         self,
@@ -1814,26 +1759,16 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap(
         self,
@@ -1988,26 +1923,16 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap(
         self,
@@ -2162,26 +2087,16 @@ class TestCopyoffload10MixedDisksMigration:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap(
         self,
@@ -2336,26 +2251,16 @@ class TestCopyoffloadLargeVmMigration:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap(
         self,
@@ -2530,26 +2435,16 @@ class TestCopyoffloadNonconformingNameMigration:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap(
         self,
@@ -2750,26 +2645,16 @@ class TestCopyoffloadWarmMigration:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap(
         self,
@@ -2929,26 +2814,16 @@ class TestCopyoffloadScaleMigration:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap(
         self,
@@ -3107,26 +2982,16 @@ class TestSimultaneousCopyoffloadMigrations:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap_plan1(
         self,
@@ -3601,26 +3466,16 @@ class TestConcurrentXcopyVddkMigration:
 
     def test_wait_for_cloud_init(
         self,
-        prepared_plan,
-        source_provider,
-        source_provider_data,
-    ):
+        prepared_plan: dict[str, Any],
+        source_provider: VMWareProvider,
+        source_provider_data: dict[str, Any],
+    ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        for vm_data in prepared_plan["virtual_machines"]:
-            vm_name = vm_data["name"]
-
-            # Get the provider VM object
-            provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-            source_vm_power = vm_data.get("source_vm_power", "off")
-
-            wait_for_cloud_init(
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-                vm_name=vm_name,
-                provider_vm_api=provider_vm_api,
-                file_name="/cloud-init.finish",
-                target_power_state=source_vm_power,
-            )
+        _wait_for_cloud_init_all_vms(
+            prepared_plan=prepared_plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
 
     def test_create_storagemap_xcopy(
         self,

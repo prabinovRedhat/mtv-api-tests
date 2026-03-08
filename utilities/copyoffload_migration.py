@@ -103,6 +103,9 @@ def wait_for_cloud_init(
         timeout: Timeout in seconds (default: 2000)
         target_power_state: Desired power state after check ("on" or "off", default: "off")
 
+    Returns:
+        None
+
     Raises:
         TimeoutExpiredError: If cloud-init does not finish within timeout
         AssertionError: If guest info or IP address is missing
@@ -149,8 +152,12 @@ def wait_for_cloud_init(
         host.users.append(User(username, password))
 
         def _check_file() -> bool:
-            rc, _, _ = host.executor().run_cmd(["ls", file_name])
-            return rc == 0
+            try:
+                rc, _, _ = host.executor().run_cmd(["ls", file_name])
+                return rc == 0
+            except Exception as e:
+                LOGGER.warning(f"SSH check failed for {vm_name}: {type(e).__name__}: {e} - retrying...")
+                return False
 
         LOGGER.info(f"Waiting for {file_name} on {ip_address}...")
         try:

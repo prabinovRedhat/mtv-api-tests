@@ -52,6 +52,36 @@ EARLY_COMPLETION_MSG = (
 )
 
 
+@pytest.fixture(scope="class")
+def vmware_cloud_init_complete(
+    prepared_plan: dict[str, Any],
+    source_provider: VMWareProvider,
+    source_provider_data: dict[str, Any],
+) -> None:
+    """Ensure cloud-init has finished on all VMs before migration tests run."""
+    wait_for_vmware_cloud_init_all_vms(
+        prepared_plan=prepared_plan,
+        source_provider=source_provider,
+        source_provider_data=source_provider_data,
+    )
+
+
+@pytest.fixture(scope="class")
+def vmware_cloud_init_complete_both_plans(
+    prepared_plan_1: dict[str, Any],
+    prepared_plan_2: dict[str, Any],
+    source_provider: VMWareProvider,
+    source_provider_data: dict[str, Any],
+) -> None:
+    """Ensure cloud-init has finished on all VMs from both plans before migration tests run."""
+    for plan in (prepared_plan_1, prepared_plan_2):
+        wait_for_vmware_cloud_init_all_vms(
+            prepared_plan=plan,
+            source_provider=source_provider,
+            source_provider_data=source_provider_data,
+        )
+
+
 @pytest.mark.copyoffload
 @pytest.mark.incremental
 @pytest.mark.parametrize(
@@ -60,26 +90,13 @@ EARLY_COMPLETION_MSG = (
     indirect=True,
     ids=["MTV-559:copyoffload-thin"],
 )
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
 class TestCopyoffloadThinMigration:
     """Copy-offload migration test - thin disk."""
 
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        wait_for_vmware_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
 
     def test_create_storagemap(
         self,
@@ -219,19 +236,6 @@ class CopyoffloadSnapshotBase:
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        wait_for_vmware_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
 
     def test_create_storagemap(
         self,
@@ -408,7 +412,7 @@ class CopyoffloadSnapshotBase:
     ids=["copyoffload-thin-snapshots"],
 )
 @pytest.mark.copyoffload_snapshots
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
 class TestCopyoffloadThinSnapshotsMigration(CopyoffloadSnapshotBase):
     """Copy-offload migration test - thin disk with snapshots."""
 
@@ -422,7 +426,7 @@ class TestCopyoffloadThinSnapshotsMigration(CopyoffloadSnapshotBase):
     ids=["MTV-575:copyoffload-2tb-vm-snapshots"],
 )
 @pytest.mark.copyoffload_snapshots
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
 class TestCopyoffload2TbVmSnapshotsMigration(CopyoffloadSnapshotBase):
     """Copy-offload migration test - 2TB VM with snapshots."""
 
@@ -435,26 +439,13 @@ class TestCopyoffload2TbVmSnapshotsMigration(CopyoffloadSnapshotBase):
     indirect=True,
     ids=["MTV-580:copyoffload-thick-lazy"],
 )
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
 class TestCopyoffloadThickLazyMigration:
     """Copy-offload migration test - thick lazy disk."""
 
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        wait_for_vmware_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
 
     def test_create_storagemap(
         self,
@@ -596,26 +587,13 @@ class TestCopyoffloadThickLazyMigration:
     indirect=True,
     ids=["MTV-561:copyoffload-multi-disk"],
 )
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
 class TestCopyoffloadMultiDiskMigration:
     """Copy-offload migration test - multiple disks."""
 
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        wait_for_vmware_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
 
     def test_create_storagemap(
         self,
@@ -760,26 +738,13 @@ class TestCopyoffloadMultiDiskMigration:
     indirect=True,
     ids=["MTV-563:copyoffload-multi-disk-different-path"],
 )
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
 class TestCopyoffloadMultiDiskDifferentPathMigration:
     """Copy-offload migration test - multiple disks in different paths."""
 
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        wait_for_vmware_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
 
     def test_create_storagemap(
         self,
@@ -924,26 +889,13 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
     indirect=True,
     ids=["MTV-562:copyoffload-rdm-virtual"],
 )
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
 class TestCopyoffloadRdmVirtualDiskMigration:
     """Copy-offload migration test - RDM virtual disk."""
 
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        wait_for_vmware_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
 
     def test_create_storagemap(
         self,
@@ -1092,26 +1044,13 @@ class TestCopyoffloadRdmVirtualDiskMigration:
     indirect=True,
     ids=["MTV-564:copyoffload-multi-datastore"],
 )
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
 class TestCopyoffloadMultiDatastoreMigration:
     """Copy-offload migration test - multiple datastores."""
 
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        wait_for_vmware_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
 
     def test_create_storagemap(
         self,
@@ -1267,7 +1206,7 @@ class TestCopyoffloadMultiDatastoreMigration:
     indirect=True,
     ids=["MTV-565:copyoffload-mixed-datastore"],
 )
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "mixed_datastore_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "mixed_datastore_config", "cleanup_migrated_vms")
 class TestCopyoffloadMixedDatastoreMigration:
     """Copy-offload migration test - mixed XCOPY and non-XCOPY datastores.
 
@@ -1282,19 +1221,6 @@ class TestCopyoffloadMixedDatastoreMigration:
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        wait_for_vmware_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
 
     def test_create_storagemap(
         self,
@@ -1445,6 +1371,7 @@ class TestCopyoffloadMixedDatastoreMigration:
     ids=["MTV-614:copyoffload-fallback-large"],
 )
 @pytest.mark.usefixtures(
+    "vmware_cloud_init_complete",
     "multus_network_name",
     "copyoffload_config",
     "mixed_datastore_config",
@@ -1467,19 +1394,6 @@ class TestCopyoffloadFallbackLargeMigration:
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        wait_for_vmware_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
 
     def test_create_storagemap(
         self,
@@ -1717,26 +1631,13 @@ class TestCopyoffloadFallbackLargeMigration:
     indirect=True,
     ids=["MTV-567:copyoffload-independent-persistent"],
 )
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
 class TestCopyoffloadIndependentPersistentDiskMigration:
     """Copy-offload migration test - independent persistent disk."""
 
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        wait_for_vmware_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
 
     def test_create_storagemap(
         self,
@@ -1881,26 +1782,13 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
     indirect=True,
     ids=["MTV-568:copyoffload-independent-nonpersistent"],
 )
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
 class TestCopyoffloadIndependentNonpersistentDiskMigration:
     """Copy-offload migration test - independent non-persistent disk."""
 
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        wait_for_vmware_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
 
     def test_create_storagemap(
         self,
@@ -2045,26 +1933,13 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
     indirect=True,
     ids=["MTV-573:copyoffload-10-mixed-disks"],
 )
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
 class TestCopyoffload10MixedDisksMigration:
     """Copy-offload migration test - 10 mixed disks (thin/thick)."""
 
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        wait_for_vmware_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
 
     def test_create_storagemap(
         self,
@@ -2209,26 +2084,13 @@ class TestCopyoffload10MixedDisksMigration:
     indirect=True,
     ids=["MTV-600:copyoffload-large-vm"],
 )
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
 class TestCopyoffloadLargeVmMigration:
     """Copy-offload migration test - large VM (1TB)."""
 
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        wait_for_vmware_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
 
     def test_create_storagemap(
         self,
@@ -2373,7 +2235,7 @@ class TestCopyoffloadLargeVmMigration:
     indirect=True,
     ids=["MTV-579:copyoffload-nonconforming-name"],
 )
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
 class TestCopyoffloadNonconformingNameMigration:
     """
     Copy-offload migration test - VM with non-conforming name.
@@ -2400,19 +2262,6 @@ class TestCopyoffloadNonconformingNameMigration:
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        wait_for_vmware_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
 
     def test_create_storagemap(
         self,
@@ -2602,7 +2451,7 @@ class TestCopyoffloadNonconformingNameMigration:
     ids=["MTV-577:copyoffload-warm"],
 )
 @pytest.mark.usefixtures(
-    "multus_network_name", "precopy_interval_forkliftcontroller", "copyoffload_config", "cleanup_migrated_vms"
+    "vmware_cloud_init_complete", "multus_network_name", "precopy_interval_forkliftcontroller", "copyoffload_config", "cleanup_migrated_vms"
 )
 class TestCopyoffloadWarmMigration:
     """Copy-offload warm migration test."""
@@ -2610,19 +2459,6 @@ class TestCopyoffloadWarmMigration:
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        wait_for_vmware_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
 
     def test_create_storagemap(
         self,
@@ -2772,26 +2608,13 @@ class TestCopyoffloadWarmMigration:
     indirect=True,
     ids=["MTV-572:copyoffload-scale"],
 )
-@pytest.mark.usefixtures("multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
 class TestCopyoffloadScaleMigration:
     """Copy-offload migration test - scale (5 VMs)."""
 
     storage_map: StorageMap
     network_map: NetworkMap
     plan_resource: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        wait_for_vmware_cloud_init_all_vms(
-            prepared_plan=prepared_plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
 
     def test_create_storagemap(
         self,
@@ -2936,7 +2759,7 @@ class TestCopyoffloadScaleMigration:
     indirect=True,
     ids=["MTV-574:simultaneous-copyoffload"],
 )
-@pytest.mark.usefixtures("copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("vmware_cloud_init_complete_both_plans", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
 class TestSimultaneousCopyoffloadMigrations:
     """Test simultaneous execution of two copyoffload migration plans."""
 
@@ -2947,21 +2770,6 @@ class TestSimultaneousCopyoffloadMigrations:
     storage_map_2: StorageMap
     network_map_2: NetworkMap
     plan_resource_2: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan_1: dict[str, Any],
-        prepared_plan_2: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish on VMs from both plans."""
-        for plan in (prepared_plan_1, prepared_plan_2):
-            wait_for_vmware_cloud_init_all_vms(
-                prepared_plan=plan,
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-            )
 
     def test_create_storagemap_plan1(
         self,
@@ -3418,7 +3226,7 @@ class TestSimultaneousCopyoffloadMigrations:
     indirect=True,
     ids=["MTV-569:concurrent-xcopy-vddk"],
 )
-@pytest.mark.usefixtures("copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures("vmware_cloud_init_complete_both_plans", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
 class TestConcurrentXcopyVddkMigration:
     """Test simultaneous execution of XCOPY and VDDK migration plans.
 
@@ -3433,21 +3241,6 @@ class TestConcurrentXcopyVddkMigration:
     storage_map_vddk: StorageMap
     network_map_vddk: NetworkMap
     plan_vddk: Plan
-
-    def test_wait_for_cloud_init(
-        self,
-        prepared_plan_1: dict[str, Any],
-        prepared_plan_2: dict[str, Any],
-        source_provider: VMWareProvider,
-        source_provider_data: dict[str, Any],
-    ) -> None:
-        """Wait for cloud-init to finish on VMs from both plans."""
-        for plan in (prepared_plan_1, prepared_plan_2):
-            wait_for_vmware_cloud_init_all_vms(
-                prepared_plan=plan,
-                source_provider=source_provider,
-                source_provider_data=source_provider_data,
-            )
 
     def test_create_storagemap_xcopy(
         self,

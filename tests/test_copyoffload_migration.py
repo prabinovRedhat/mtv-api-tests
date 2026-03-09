@@ -14,7 +14,6 @@ import pytest
 
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
-    from libs.providers.vmware import VMWareProvider
 
 from ocp_resources.migration import Migration
 from ocp_resources.network_map import NetworkMap
@@ -27,7 +26,6 @@ from simple_logger.logger import get_logger
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from utilities.copyoffload_migration import wait_for_vmware_cloud_init_all_vms
 from utilities.migration_utils import get_cutover_value
 from utilities.mtv_migration import (
     create_plan_resource,
@@ -50,36 +48,6 @@ EARLY_COMPLETION_MSG = (
     "Plan {plan_num} reached {completed_status} before both plans were executing simultaneously. "
     "Other plan status: {other_status}"
 )
-
-
-@pytest.fixture(scope="class")
-def vmware_cloud_init_complete(
-    prepared_plan: dict[str, Any],
-    source_provider: VMWareProvider,
-    source_provider_data: dict[str, Any],
-) -> None:
-    """Ensure cloud-init has finished on all VMs before migration tests run."""
-    wait_for_vmware_cloud_init_all_vms(
-        prepared_plan=prepared_plan,
-        source_provider=source_provider,
-        source_provider_data=source_provider_data,
-    )
-
-
-@pytest.fixture(scope="class")
-def vmware_cloud_init_complete_both_plans(
-    prepared_plan_1: dict[str, Any],
-    prepared_plan_2: dict[str, Any],
-    source_provider: VMWareProvider,
-    source_provider_data: dict[str, Any],
-) -> None:
-    """Ensure cloud-init has finished on all VMs from both plans before migration tests run."""
-    for plan in (prepared_plan_1, prepared_plan_2):
-        wait_for_vmware_cloud_init_all_vms(
-            prepared_plan=plan,
-            source_provider=source_provider,
-            source_provider_data=source_provider_data,
-        )
 
 
 @pytest.mark.copyoffload

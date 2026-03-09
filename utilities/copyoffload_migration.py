@@ -82,6 +82,45 @@ def wait_for_plan_secret(ocp_admin_client: DynamicClient, namespace: str, plan_n
         LOGGER.warning(f"Timeout waiting for plan secret '{plan_name}-*' - continuing anyway")
 
 
+def wait_for_vmware_cloud_init_all_vms(
+    prepared_plan: dict[str, Any],
+    source_provider: VMWareProvider,
+    source_provider_data: dict[str, Any],
+) -> None:
+    """Wait for cloud-init to finish on all VMware VMs in the plan.
+
+    Iterates over all VMs in the plan and waits for each to signal
+    cloud-init completion via the presence of ``/cloud-init.finish``.
+
+    Args:
+        prepared_plan (dict[str, Any]): Processed plan config with VM data
+        source_provider (VMWareProvider): Source VMware provider instance
+        source_provider_data (dict[str, Any]): Source provider configuration data
+
+    Returns:
+        None
+
+    Raises:
+        TimeoutExpiredError: If cloud-init does not finish within timeout
+        ValueError: If guest info or IP address is unavailable
+    """
+    for vm_data in prepared_plan["virtual_machines"]:
+        vm_name = vm_data["name"]
+        provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
+
+        cloud_init_kwargs: dict[str, Any] = {
+            "source_provider": source_provider,
+            "source_provider_data": source_provider_data,
+            "vm_name": vm_name,
+            "provider_vm_api": provider_vm_api,
+            "file_name": "/cloud-init.finish",
+        }
+        if "source_vm_power" in vm_data:
+            cloud_init_kwargs["target_power_state"] = vm_data["source_vm_power"]
+
+        wait_for_cloud_init(**cloud_init_kwargs)
+
+
 def wait_for_cloud_init(
     source_provider: VMWareProvider,
     source_provider_data: dict[str, Any],

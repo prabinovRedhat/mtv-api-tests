@@ -27,7 +27,7 @@ from simple_logger.logger import get_logger
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from utilities.copyoffload_migration import wait_for_cloud_init
+from utilities.copyoffload_migration import wait_for_vmware_cloud_init_all_vms
 from utilities.migration_utils import get_cutover_value
 from utilities.mtv_migration import (
     create_plan_resource,
@@ -50,45 +50,6 @@ EARLY_COMPLETION_MSG = (
     "Plan {plan_num} reached {completed_status} before both plans were executing simultaneously. "
     "Other plan status: {other_status}"
 )
-
-
-def _wait_for_cloud_init_all_vms(
-    prepared_plan: dict[str, Any],
-    source_provider: "VMWareProvider",
-    source_provider_data: dict[str, Any],
-) -> None:
-    """Wait for cloud-init to finish on all VMs in the plan.
-
-    Iterates over all VMs in the plan and waits for each to signal
-    cloud-init completion via the presence of ``/cloud-init.finish``.
-
-    Args:
-        prepared_plan (dict[str, Any]): Processed plan config with VM data
-        source_provider (VMWareProvider): Source VMware provider instance
-        source_provider_data (dict[str, Any]): Source provider configuration data
-
-    Returns:
-        None
-
-    Raises:
-        TimeoutExpiredError: If cloud-init does not finish within timeout
-        ValueError: If guest info or IP address is unavailable
-    """
-    for vm_data in prepared_plan["virtual_machines"]:
-        vm_name = vm_data["name"]
-        provider_vm_api = prepared_plan["source_vms_data"][vm_name]["provider_vm_api"]
-
-        cloud_init_kwargs: dict[str, Any] = {
-            "source_provider": source_provider,
-            "source_provider_data": source_provider_data,
-            "vm_name": vm_name,
-            "provider_vm_api": provider_vm_api,
-            "file_name": "/cloud-init.finish",
-        }
-        if "source_vm_power" in vm_data:
-            cloud_init_kwargs["target_power_state"] = vm_data["source_vm_power"]
-
-        wait_for_cloud_init(**cloud_init_kwargs)
 
 
 @pytest.mark.copyoffload
@@ -114,7 +75,7 @@ class TestCopyoffloadThinMigration:
         source_provider_data: dict[str, Any],
     ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
+        wait_for_vmware_cloud_init_all_vms(
             prepared_plan=prepared_plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
@@ -266,7 +227,7 @@ class CopyoffloadSnapshotBase:
         source_provider_data: dict[str, Any],
     ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
+        wait_for_vmware_cloud_init_all_vms(
             prepared_plan=prepared_plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
@@ -489,7 +450,7 @@ class TestCopyoffloadThickLazyMigration:
         source_provider_data: dict[str, Any],
     ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
+        wait_for_vmware_cloud_init_all_vms(
             prepared_plan=prepared_plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
@@ -650,7 +611,7 @@ class TestCopyoffloadMultiDiskMigration:
         source_provider_data: dict[str, Any],
     ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
+        wait_for_vmware_cloud_init_all_vms(
             prepared_plan=prepared_plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
@@ -814,7 +775,7 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
         source_provider_data: dict[str, Any],
     ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
+        wait_for_vmware_cloud_init_all_vms(
             prepared_plan=prepared_plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
@@ -978,7 +939,7 @@ class TestCopyoffloadRdmVirtualDiskMigration:
         source_provider_data: dict[str, Any],
     ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
+        wait_for_vmware_cloud_init_all_vms(
             prepared_plan=prepared_plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
@@ -1146,7 +1107,7 @@ class TestCopyoffloadMultiDatastoreMigration:
         source_provider_data: dict[str, Any],
     ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
+        wait_for_vmware_cloud_init_all_vms(
             prepared_plan=prepared_plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
@@ -1329,7 +1290,7 @@ class TestCopyoffloadMixedDatastoreMigration:
         source_provider_data: dict[str, Any],
     ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
+        wait_for_vmware_cloud_init_all_vms(
             prepared_plan=prepared_plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
@@ -1514,7 +1475,7 @@ class TestCopyoffloadFallbackLargeMigration:
         source_provider_data: dict[str, Any],
     ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
+        wait_for_vmware_cloud_init_all_vms(
             prepared_plan=prepared_plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
@@ -1771,7 +1732,7 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
         source_provider_data: dict[str, Any],
     ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
+        wait_for_vmware_cloud_init_all_vms(
             prepared_plan=prepared_plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
@@ -1935,7 +1896,7 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
         source_provider_data: dict[str, Any],
     ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
+        wait_for_vmware_cloud_init_all_vms(
             prepared_plan=prepared_plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
@@ -2099,7 +2060,7 @@ class TestCopyoffload10MixedDisksMigration:
         source_provider_data: dict[str, Any],
     ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
+        wait_for_vmware_cloud_init_all_vms(
             prepared_plan=prepared_plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
@@ -2263,7 +2224,7 @@ class TestCopyoffloadLargeVmMigration:
         source_provider_data: dict[str, Any],
     ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
+        wait_for_vmware_cloud_init_all_vms(
             prepared_plan=prepared_plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
@@ -2447,7 +2408,7 @@ class TestCopyoffloadNonconformingNameMigration:
         source_provider_data: dict[str, Any],
     ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
+        wait_for_vmware_cloud_init_all_vms(
             prepared_plan=prepared_plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
@@ -2657,7 +2618,7 @@ class TestCopyoffloadWarmMigration:
         source_provider_data: dict[str, Any],
     ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
+        wait_for_vmware_cloud_init_all_vms(
             prepared_plan=prepared_plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
@@ -2826,7 +2787,7 @@ class TestCopyoffloadScaleMigration:
         source_provider_data: dict[str, Any],
     ) -> None:
         """Wait for cloud-init to finish by checking for /cloud-init.finish."""
-        _wait_for_cloud_init_all_vms(
+        wait_for_vmware_cloud_init_all_vms(
             prepared_plan=prepared_plan,
             source_provider=source_provider,
             source_provider_data=source_provider_data,
@@ -2996,7 +2957,7 @@ class TestSimultaneousCopyoffloadMigrations:
     ) -> None:
         """Wait for cloud-init to finish on VMs from both plans."""
         for plan in (prepared_plan_1, prepared_plan_2):
-            _wait_for_cloud_init_all_vms(
+            wait_for_vmware_cloud_init_all_vms(
                 prepared_plan=plan,
                 source_provider=source_provider,
                 source_provider_data=source_provider_data,
@@ -3482,7 +3443,7 @@ class TestConcurrentXcopyVddkMigration:
     ) -> None:
         """Wait for cloud-init to finish on VMs from both plans."""
         for plan in (prepared_plan_1, prepared_plan_2):
-            _wait_for_cloud_init_all_vms(
+            wait_for_vmware_cloud_init_all_vms(
                 prepared_plan=plan,
                 source_provider=source_provider,
                 source_provider_data=source_provider_data,

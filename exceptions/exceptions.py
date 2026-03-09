@@ -47,8 +47,23 @@ class OvirtMTVDatacenterStatusError(Exception):
 
 
 class MissingProvidersFileError(Exception):
-    def __init__(self) -> None:
-        super().__init__("'.providers.json' file is missing or empty")
+    def __init__(self, path: str = ".providers.json") -> None:
+        """Initialize MissingProvidersFileError.
+
+        Args:
+            path (str): Path to the providers JSON file.
+        """
+        super().__init__(f"No provider configurations found in '{path}'")
+
+
+class ProviderEmptyContentError(Exception):
+    def __init__(self, path: str) -> None:
+        """Initialize ProviderEmptyContentError.
+
+        Args:
+            path (str): Path to the empty providers JSON file.
+        """
+        super().__init__(f"Providers JSON file is empty: '{path}'")
 
 
 class VmCloneError(Exception):

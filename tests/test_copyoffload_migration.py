@@ -90,7 +90,13 @@ def vmware_cloud_init_complete_both_plans(
     indirect=True,
     ids=["MTV-559:copyoffload-thin"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_complete",
+    "multus_network_name",
+    "copyoffload_config",
+    "setup_copyoffload_ssh",
+    "cleanup_migrated_vms",
+)
 class TestCopyoffloadThinMigration:
     """Copy-offload migration test - thin disk."""
 
@@ -412,7 +418,13 @@ class CopyoffloadSnapshotBase:
     ids=["copyoffload-thin-snapshots"],
 )
 @pytest.mark.copyoffload_snapshots
-@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_complete",
+    "multus_network_name",
+    "copyoffload_config",
+    "setup_copyoffload_ssh",
+    "cleanup_migrated_vms",
+)
 class TestCopyoffloadThinSnapshotsMigration(CopyoffloadSnapshotBase):
     """Copy-offload migration test - thin disk with snapshots."""
 
@@ -426,7 +438,13 @@ class TestCopyoffloadThinSnapshotsMigration(CopyoffloadSnapshotBase):
     ids=["MTV-575:copyoffload-2tb-vm-snapshots"],
 )
 @pytest.mark.copyoffload_snapshots
-@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_complete",
+    "multus_network_name",
+    "copyoffload_config",
+    "setup_copyoffload_ssh",
+    "cleanup_migrated_vms",
+)
 class TestCopyoffload2TbVmSnapshotsMigration(CopyoffloadSnapshotBase):
     """Copy-offload migration test - 2TB VM with snapshots."""
 
@@ -439,7 +457,13 @@ class TestCopyoffload2TbVmSnapshotsMigration(CopyoffloadSnapshotBase):
     indirect=True,
     ids=["MTV-580:copyoffload-thick-lazy"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_complete",
+    "multus_network_name",
+    "copyoffload_config",
+    "setup_copyoffload_ssh",
+    "cleanup_migrated_vms",
+)
 class TestCopyoffloadThickLazyMigration:
     """Copy-offload migration test - thick lazy disk."""
 
@@ -587,7 +611,13 @@ class TestCopyoffloadThickLazyMigration:
     indirect=True,
     ids=["MTV-561:copyoffload-multi-disk"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_complete",
+    "multus_network_name",
+    "copyoffload_config",
+    "setup_copyoffload_ssh",
+    "cleanup_migrated_vms",
+)
 class TestCopyoffloadMultiDiskMigration:
     """Copy-offload migration test - multiple disks."""
 
@@ -738,7 +768,13 @@ class TestCopyoffloadMultiDiskMigration:
     indirect=True,
     ids=["MTV-563:copyoffload-multi-disk-different-path"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_complete",
+    "multus_network_name",
+    "copyoffload_config",
+    "setup_copyoffload_ssh",
+    "cleanup_migrated_vms",
+)
 class TestCopyoffloadMultiDiskDifferentPathMigration:
     """Copy-offload migration test - multiple disks in different paths."""
 
@@ -889,7 +925,9 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
     indirect=True,
     ids=["MTV-562:copyoffload-rdm-virtual"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms"
+)
 class TestCopyoffloadRdmVirtualDiskMigration:
     """Copy-offload migration test - RDM virtual disk."""
 
@@ -1044,7 +1082,9 @@ class TestCopyoffloadRdmVirtualDiskMigration:
     indirect=True,
     ids=["MTV-564:copyoffload-multi-datastore"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms"
+)
 class TestCopyoffloadMultiDatastoreMigration:
     """Copy-offload migration test - multiple datastores."""
 
@@ -1206,7 +1246,13 @@ class TestCopyoffloadMultiDatastoreMigration:
     indirect=True,
     ids=["MTV-565:copyoffload-mixed-datastore"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "mixed_datastore_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_complete",
+    "multus_network_name",
+    "copyoffload_config",
+    "mixed_datastore_config",
+    "cleanup_migrated_vms",
+)
 class TestCopyoffloadMixedDatastoreMigration:
     """Copy-offload migration test - mixed XCOPY and non-XCOPY datastores.
 
@@ -1631,7 +1677,9 @@ class TestCopyoffloadFallbackLargeMigration:
     indirect=True,
     ids=["MTV-567:copyoffload-independent-persistent"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms"
+)
 class TestCopyoffloadIndependentPersistentDiskMigration:
     """Copy-offload migration test - independent persistent disk."""
 
@@ -1782,7 +1830,9 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
     indirect=True,
     ids=["MTV-568:copyoffload-independent-nonpersistent"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms"
+)
 class TestCopyoffloadIndependentNonpersistentDiskMigration:
     """Copy-offload migration test - independent non-persistent disk."""
 
@@ -1933,7 +1983,9 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
     indirect=True,
     ids=["MTV-573:copyoffload-10-mixed-disks"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms"
+)
 class TestCopyoffload10MixedDisksMigration:
     """Copy-offload migration test - 10 mixed disks (thin/thick)."""
 
@@ -2084,7 +2136,9 @@ class TestCopyoffload10MixedDisksMigration:
     indirect=True,
     ids=["MTV-600:copyoffload-large-vm"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms"
+)
 class TestCopyoffloadLargeVmMigration:
     """Copy-offload migration test - large VM (1TB)."""
 
@@ -2235,7 +2289,13 @@ class TestCopyoffloadLargeVmMigration:
     indirect=True,
     ids=["MTV-579:copyoffload-nonconforming-name"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_complete",
+    "multus_network_name",
+    "copyoffload_config",
+    "setup_copyoffload_ssh",
+    "cleanup_migrated_vms",
+)
 class TestCopyoffloadNonconformingNameMigration:
     """
     Copy-offload migration test - VM with non-conforming name.
@@ -2451,7 +2511,11 @@ class TestCopyoffloadNonconformingNameMigration:
     ids=["MTV-577:copyoffload-warm"],
 )
 @pytest.mark.usefixtures(
-    "vmware_cloud_init_complete", "multus_network_name", "precopy_interval_forkliftcontroller", "copyoffload_config", "cleanup_migrated_vms"
+    "vmware_cloud_init_complete",
+    "multus_network_name",
+    "precopy_interval_forkliftcontroller",
+    "copyoffload_config",
+    "cleanup_migrated_vms",
 )
 class TestCopyoffloadWarmMigration:
     """Copy-offload warm migration test."""
@@ -2608,7 +2672,13 @@ class TestCopyoffloadWarmMigration:
     indirect=True,
     ids=["MTV-572:copyoffload-scale"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_complete", "multus_network_name", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_complete",
+    "multus_network_name",
+    "copyoffload_config",
+    "setup_copyoffload_ssh",
+    "cleanup_migrated_vms",
+)
 class TestCopyoffloadScaleMigration:
     """Copy-offload migration test - scale (5 VMs)."""
 
@@ -2759,7 +2829,9 @@ class TestCopyoffloadScaleMigration:
     indirect=True,
     ids=["MTV-574:simultaneous-copyoffload"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_complete_both_plans", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_complete_both_plans", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms"
+)
 class TestSimultaneousCopyoffloadMigrations:
     """Test simultaneous execution of two copyoffload migration plans."""
 
@@ -3226,7 +3298,9 @@ class TestSimultaneousCopyoffloadMigrations:
     indirect=True,
     ids=["MTV-569:concurrent-xcopy-vddk"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_complete_both_plans", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_complete_both_plans", "copyoffload_config", "setup_copyoffload_ssh", "cleanup_migrated_vms"
+)
 class TestConcurrentXcopyVddkMigration:
     """Test simultaneous execution of XCOPY and VDDK migration plans.
 

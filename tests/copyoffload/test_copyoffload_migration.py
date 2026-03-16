@@ -359,6 +359,15 @@ class CopyoffloadSnapshotBase:
             target_namespace=target_namespace,
         )
 
+    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for all disks."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
+        )
+
     def test_check_vms(
         self,
         prepared_plan,
@@ -556,6 +565,15 @@ class TestCopyoffloadThickLazyMigration:
             target_namespace=target_namespace,
         )
 
+    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for all disks."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
+        )
+
     def test_check_vms(
         self,
         prepared_plan,
@@ -708,6 +726,15 @@ class TestCopyoffloadMultiDiskMigration:
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
+        )
+
+    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for all disks."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
         )
 
     def test_check_vms(
@@ -867,6 +894,15 @@ class TestCopyoffloadMultiDiskDifferentPathMigration:
             target_namespace=target_namespace,
         )
 
+    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for all disks."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
+        )
+
     def test_check_vms(
         self,
         prepared_plan,
@@ -1020,6 +1056,15 @@ class TestCopyoffloadRdmVirtualDiskMigration:
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
+        )
+
+    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for all disks."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
         )
 
     def test_check_vms(
@@ -1182,6 +1227,15 @@ class TestCopyoffloadMultiDatastoreMigration:
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
+        )
+
+    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for all disks."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
         )
 
     def test_check_vms(
@@ -1352,6 +1406,15 @@ class TestCopyoffloadMixedDatastoreMigration:
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
+        )
+
+    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for all disks."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
         )
 
     def test_check_vms(
@@ -1598,6 +1661,15 @@ class TestCopyoffloadFallbackLargeMigration:
             target_namespace=target_namespace,
         )
 
+    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY fallback was used (no XCOPY acceleration)."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=False,
+        )
+
     def test_check_vms(
         self,
         prepared_plan: dict,
@@ -1766,6 +1838,15 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
             target_namespace=target_namespace,
         )
 
+    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for all disks."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
+        )
+
     def test_check_vms(
         self,
         prepared_plan,
@@ -1915,6 +1996,15 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
+        )
+
+    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for all disks."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
         )
 
     def test_check_vms(
@@ -2068,6 +2158,15 @@ class TestCopyoffload10MixedDisksMigration:
             target_namespace=target_namespace,
         )
 
+    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for all disks."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
+        )
+
     def test_check_vms(
         self,
         prepared_plan,
@@ -2217,6 +2316,15 @@ class TestCopyoffloadLargeVmMigration:
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
+        )
+
+    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for all disks."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
         )
 
     def test_check_vms(
@@ -2401,6 +2509,15 @@ class TestCopyoffloadNonconformingNameMigration:
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
+        )
+
+    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for all disks."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
         )
 
     def test_check_vms(
@@ -2602,6 +2719,15 @@ class TestCopyoffloadWarmMigration:
             cut_over=get_cutover_value(),
         )
 
+    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for all disks."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
+        )
+
     def test_check_vms(
         self,
         prepared_plan,
@@ -2757,6 +2883,15 @@ class TestCopyoffloadScaleMigration:
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
+        )
+
+    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for all disks."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
         )
 
     def test_check_vms(
@@ -3167,6 +3302,15 @@ class TestSimultaneousCopyoffloadMigrations:
         wait_for_migration_complate(plan=self.plan_resource_2)
         LOGGER.info("Copyoffload migration 2 completed")
 
+    def test_check_xcopy_used_plan1(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for plan 1."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource_1,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
+        )
+
     def test_check_vms_plan1(
         self,
         prepared_plan_1: dict[str, Any],
@@ -3209,6 +3353,15 @@ class TestSimultaneousCopyoffloadMigrations:
         )
         verify_vm_disk_count(
             destination_provider=destination_provider, plan=prepared_plan_1, target_namespace=target_namespace
+        )
+
+    def test_check_xcopy_used_plan2(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for plan 2."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource_2,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
         )
 
     def test_check_vms_plan2(
@@ -3601,6 +3754,15 @@ class TestConcurrentXcopyVddkMigration:
         LOGGER.info("Waiting for VDDK migration to complete")
         wait_for_migration_complate(plan=self.plan_vddk)
         LOGGER.info("VDDK migration completed")
+
+    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for XCOPY plan."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_xcopy,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
+        )
 
     def test_check_vms_xcopy(
         self,

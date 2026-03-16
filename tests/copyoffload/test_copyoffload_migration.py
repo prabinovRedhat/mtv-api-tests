@@ -26,6 +26,7 @@ from simple_logger.logger import get_logger
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
+from utilities.copyoffload_migration import verify_xcopy_used
 from utilities.migration_utils import get_cutover_value
 from utilities.mtv_migration import (
     create_plan_resource,
@@ -177,6 +178,15 @@ class TestCopyoffloadThinMigration:
             fixture_store=fixture_store,
             plan=self.plan_resource,
             target_namespace=target_namespace,
+        )
+
+    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
+        """Verify VAAI XCOPY acceleration was used for all disks."""
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
         )
 
     def test_check_vms(

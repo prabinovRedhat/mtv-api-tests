@@ -2,15 +2,16 @@
 Copy-offload migration utilities for MTV tests.
 
 This module provides copy-offload specific functionality for VM migration tests,
-specifically credential management for copy-offload configurations.
+including credential management, cloud-init readiness checks, and XCOPY validation.
 """
 
 from __future__ import annotations
 
 import os
+import re
 from typing import TYPE_CHECKING, Any
 
-from kubernetes.dynamic import DynamicClient
+from ocp_resources.pod import Pod
 from ocp_resources.secret import Secret
 from rrmngmnt import Host, RootUser, User
 from simple_logger.logger import get_logger
@@ -19,7 +20,9 @@ from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 from utilities.post_migration import get_ssh_credentials_from_provider_config
 
 if TYPE_CHECKING:
+    from kubernetes.dynamic import DynamicClient
     from libs.providers.vmware import VMWareProvider
+    from ocp_resources.plan import Plan
 
 LOGGER = get_logger(__name__)
 
@@ -215,3 +218,84 @@ def wait_for_cloud_init(
                 LOGGER.warning(f"Failed to power off VM '{vm_name}': {type(e).__name__}: {e}")
         else:
             LOGGER.info(f"Leaving VM {vm_name} powered on")
+
+
+def verify_xcopy_used(
+    ocp_admin_client: DynamicClient,
+    plan: Plan,
+    target_namespace: str,
+    expected_xcopy_used: bool,
+) -> None:
+    """Verify xcopyUsed matches expected value for all disks in a copy-offload migration.
+
+    After migration, populate pods (which performed the XCOPY clone) remain as
+    Completed in the target namespace. Their logs contain structured messages
+    indicating whether VAAI XCOPY acceleration was used (xcopyUsed=1) or
+    fallback was used (xcopyUsed=0).
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
+        plan (Plan): The Plan CR resource (used to find the migration UID).
+        target_namespace (str): Namespace where populate pods exist.
+        expected_xcopy_used (bool): Expected xcopyUsed value.
+            True (xcopyUsed=1) for XCOPY-capable datastores.
+            False (xcopyUsed=0) for fallback/non-XCOPY datastores.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If no populate pods found or xcopyUsed not found in pod logs.
+        AssertionError: If any disk's xcopyUsed value doesn't match expected.
+    """
+    plan_status = plan.instance.status
+    if not plan_status:
+        raise ValueError(f"Plan '{plan.name}' has no status")
+
+    migration = getattr(plan_status, "migration", None)
+    if not migration:
+        raise ValueError(f"Plan '{plan.name}' has no migration in status")
+
+    migration_history = getattr(migration, "history", None)
+    if not migration_history:
+        raise ValueError(f"Plan '{plan.name}' has no migration history")
+
+    first_history = migration_history[0]
+    migration_ref = getattr(first_history, "migration", None)
+    if not migration_ref or not getattr(migration_ref, "uid", None):
+        raise ValueError(f"Plan '{plan.name}' migration history has no migration UID")
+
+    migration_uid: str = migration_ref.uid
+    LOGGER.info(f"Checking xcopyUsed for migration '{migration_uid}'")
+
+    populate_pods: list[Pod] = [
+        pod
+        for pod in Pod.get(
+            client=ocp_admin_client,
+            namespace=target_namespace,
+            label_selector=f"migration={migration_uid}",
+        )
+        if pod.name.startswith("populate-")
+    ]
+
+    if not populate_pods:
+        raise ValueError(f"No populate pods found for migration '{migration_uid}' in namespace '{target_namespace}'")
+
+    LOGGER.info(f"Found {len(populate_pods)} populate pod(s)")
+
+    expected_value: int = 1 if expected_xcopy_used else 0
+
+    for pod in populate_pods:
+        pvc_name: str = pod.instance.metadata.labels.get("pvcName", pod.name)
+        log_content: str = pod.log()
+
+        matches: list[str] = re.findall(r"xcopyUsed=(\d+)", log_content)
+        if not matches:
+            raise ValueError(f"xcopyUsed not found in populate pod '{pod.name}' logs")
+
+        xcopy_used: int = int(matches[-1])
+        LOGGER.info(f"Pod '{pod.name}' (PVC '{pvc_name}'): xcopyUsed={xcopy_used}")
+
+        assert xcopy_used == expected_value, (
+            f"Pod '{pod.name}' (PVC '{pvc_name}'): expected xcopyUsed={expected_value}, got xcopyUsed={xcopy_used}"
+        )

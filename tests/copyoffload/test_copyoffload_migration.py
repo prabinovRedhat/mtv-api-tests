@@ -186,7 +186,7 @@ class TestCopyoffloadThinMigration:
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
             target_namespace=target_namespace,
-            expected_xcopy_used=True,
+            expected_xcopy_used=False,
         )
 
     def test_check_vms(

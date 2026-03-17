@@ -1,23 +1,51 @@
 #!/bin/bash
 set -euo pipefail
 
-USAGE="Usage: $(basename "$0") enable <bm-host-ip>
-       $(basename "$0") disable
+DOMAIN="mtv.local"
 
-Configure DNS resolution for bare-metal host via resolvectl.
+USAGE="Usage: $(basename "$0") enable <bm-host-ip> [--domain <domain>]
+       $(basename "$0") disable [--domain <domain>]
+
+Configure DNS resolution for bare-metal host.
+Auto-detects OS (Linux uses resolvectl, macOS uses /etc/resolver).
+
+Options:
+  --domain <domain>  DNS domain to configure (default: $DOMAIN)
 
 Commands:
-  enable <ip>  Set the BM host IP as DNS server for the detected interface
-  disable      Revert DNS settings on the interface that has mtv.local configured
+  enable <ip>  Set the BM host IP as DNS server for the domain
+  disable      Revert DNS settings
 
 Examples:
   $(basename "$0") enable 10.46.248.80
+  $(basename "$0") enable 10.46.248.80 --domain custom.local
   $(basename "$0") disable"
 
 die() {
     echo "Error: $1" >&2
     exit 1
 }
+
+validate_ip() {
+    local ip="$1"
+    local octet="(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
+    [[ "$ip" =~ ^${octet}\.${octet}\.${octet}\.${octet}$ ]] || die "Invalid IP address: $ip"
+}
+
+validate_domain() {
+    local domain="$1"
+    [[ "$domain" != *..* && "$domain" != *. ]] || die "Invalid domain: $domain"
+
+    local label
+    local -a labels
+    IFS='.' read -r -a labels <<< "$domain"
+    for label in "${labels[@]}"; do
+        [[ ${#label} -le 63 ]] || die "Invalid domain: $domain"
+        [[ "$label" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$ ]] || die "Invalid domain: $domain"
+    done
+}
+
+# --- Linux helpers (resolvectl) ---
 
 get_interface() {
     local ip="$1"
@@ -31,7 +59,9 @@ get_interface() {
     echo "$iface"
 }
 
-get_mtv_interface() {
+get_domain_interface() {
+    local domain="$1"
+    local escaped_domain="${domain//./\\.}"
     local current_iface=""
     local found_iface=""
 
@@ -39,41 +69,118 @@ get_mtv_interface() {
     while IFS= read -r line; do
         if [[ "$line" =~ $link_re ]]; then
             current_iface="${BASH_REMATCH[1]}"
-        elif [[ -n "$current_iface" && "$line" =~ DNS\ Domain:.*mtv\.local ]]; then
+        elif [[ -n "$current_iface" && "$line" =~ DNS\ Domain:.*(^|[[:space:]])~?${escaped_domain}([[:space:]]|$) ]]; then
             found_iface="$current_iface"
             break
         fi
     done < <(resolvectl status 2>/dev/null)
 
-    [[ -n "$found_iface" ]] || die "No interface found with mtv.local DNS domain configured"
+    [[ -n "$found_iface" ]] || die "No interface found with $domain DNS domain configured"
     echo "$found_iface"
+}
+
+enable_linux() {
+    local ip="$1"
+    local domain="$2"
+    local iface
+    iface="$(get_interface "$ip")"
+    echo "Detected interface: $iface"
+    echo "Setting DNS server $ip on $iface for ~$domain"
+    sudo resolvectl dns "$iface" "$ip"
+    sudo resolvectl domain "$iface" "~$domain"
+    echo "DNS setup enabled for $ip on $iface"
+}
+
+disable_linux() {
+    local domain="$1"
+    local iface
+    iface="$(get_domain_interface "$domain")"
+    echo "Detected interface: $iface"
+    echo "Removing $domain DNS domain from $iface"
+    sudo resolvectl domain "$iface" ""
+    echo "Removing DNS server from $iface"
+    sudo resolvectl dns "$iface" ""
+    echo "DNS setup disabled on $iface"
+}
+
+# --- macOS helpers (/etc/resolver) ---
+
+enable_macos() {
+    local ip="$1"
+    local domain="$2"
+    echo "Setting up DNS resolver for $domain -> $ip"
+    sudo mkdir -p /etc/resolver
+    printf 'nameserver %s\n' "$ip" | sudo tee "/etc/resolver/$domain" >/dev/null
+    echo "DNS setup enabled. Verifying..."
+    sleep 1  # Allow macOS resolver cache to refresh
+    scutil --dns | grep -F -A5 "$domain" || echo "Resolver added (may take a moment to activate)"
+}
+
+disable_macos() {
+    local domain="$1"
+    if [[ -f "/etc/resolver/$domain" ]]; then
+        echo "Removing $domain DNS resolver"
+        sudo rm "/etc/resolver/$domain"
+        echo "DNS setup disabled"
+    else
+        echo "No $domain resolver found"
+    fi
+}
+
+# --- OS dispatch ---
+
+run_enable() {
+    local ip="$1"
+    local domain="$2"
+    case "$(uname -s)" in
+        Linux)  enable_linux "$ip" "$domain" ;;
+        Darwin) enable_macos "$ip" "$domain" ;;
+        *)      die "Unsupported OS: $(uname -s). Supported: Linux, macOS." ;;
+    esac
+}
+
+run_disable() {
+    local domain="$1"
+    case "$(uname -s)" in
+        Linux)  disable_linux "$domain" ;;
+        Darwin) disable_macos "$domain" ;;
+        *)      die "Unsupported OS: $(uname -s). Supported: Linux, macOS." ;;
+    esac
+}
+
+# --- Main ---
+
+parse_options() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --domain)
+                [[ -n "${2:-}" ]] || die "--domain requires a value"
+                DOMAIN="$2"; shift 2 ;;
+            *) die "Unknown option: $1" ;;
+        esac
+    done
 }
 
 [[ $# -ge 1 ]] || { echo "$USAGE" >&2; exit 1; }
 
 ACTION="$1"
+shift
 
 [[ "$ACTION" == "enable" || "$ACTION" == "disable" ]] || die "Invalid action '$ACTION'. Must be 'enable' or 'disable'."
 
 case "$ACTION" in
     enable)
-        [[ $# -eq 2 ]] || { echo "$USAGE" >&2; exit 1; }
-        IP="$2"
-        IFACE="$(get_interface "$IP")"
-        echo "Detected interface: $IFACE"
-        echo "Setting DNS server $IP on $IFACE"
-        sudo resolvectl dns "$IFACE" "$IP"
-        sudo resolvectl domain "$IFACE" '~mtv.local'
-        echo "DNS setup enabled for $IP on $IFACE"
+        [[ $# -ge 1 ]] || { echo "$USAGE" >&2; exit 1; }
+        IP="$1"
+        shift
+        parse_options "$@"
+        validate_ip "$IP"
+        validate_domain "$DOMAIN"
+        run_enable "$IP" "$DOMAIN"
         ;;
     disable)
-        [[ $# -eq 1 ]] || { echo "$USAGE" >&2; exit 1; }
-        IFACE="$(get_mtv_interface)"
-        echo "Detected interface: $IFACE"
-        echo "Removing mtv.local DNS domain from $IFACE"
-        sudo resolvectl domain "$IFACE" ""
-        echo "Removing BM DNS server from $IFACE"
-        sudo resolvectl dns "$IFACE" ""
-        echo "DNS setup disabled on $IFACE"
+        parse_options "$@"
+        validate_domain "$DOMAIN"
+        run_disable "$DOMAIN"
         ;;
 esac

@@ -1409,7 +1409,11 @@ class TestCopyoffloadMixedDatastoreMigration:
         )
 
     def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
-        """TODO: check excpected xcopy for non xcopy datastore.Verify VAAI XCOPY acceleration was used for all disks."""
+        """Verify VAAI XCOPY acceleration was used for all disks.
+
+        TODO: expected_xcopy_used should be False for non-XCOPY datastore
+        and True only for supported datastore.
+        """
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,
@@ -1999,7 +2003,7 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
         )
 
     def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
-        """TODO: check if its False or True. Verify VAAI XCOPY acceleration was used for all disks."""
+        """Verify VAAI XCOPY acceleration was used for all disks."""
         verify_xcopy_used(
             ocp_admin_client=ocp_admin_client,
             plan=self.plan_resource,

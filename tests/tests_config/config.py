@@ -200,7 +200,7 @@ tests_params: dict = {
                 "disk_type": "thin",
                 "add_disks": [
                     {
-                        "size_gb": 30,
+                        "size_gb": 10,
                         "disk_mode": "independent_nonpersistent",
                         "provision_type": "thin",
                     },

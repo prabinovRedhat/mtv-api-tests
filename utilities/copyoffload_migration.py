@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 import re
-import time
 from typing import TYPE_CHECKING, Any
 
 from ocp_resources.pod import Pod
@@ -215,8 +214,6 @@ def wait_for_cloud_init(
             LOGGER.info(f"Powering off VM - {vm_name}")
             try:
                 source_provider.stop_vm(provider_vm_api)
-                # Extra settle time for vSphere to fully reconcile power state
-                time.sleep(20)
             except Exception as e:
                 LOGGER.warning(f"Failed to power off VM '{vm_name}': {type(e).__name__}: {e}")
         else:

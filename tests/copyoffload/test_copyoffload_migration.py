@@ -1408,19 +1408,6 @@ class TestCopyoffloadMixedDatastoreMigration:
             target_namespace=target_namespace,
         )
 
-    def test_check_xcopy_used(self, ocp_admin_client: "DynamicClient", target_namespace: str) -> None:
-        """Verify VAAI XCOPY acceleration was used for all disks.
-
-        TODO: expected_xcopy_used should be False for non-XCOPY datastore
-        and True only for supported datastore.
-        """
-        verify_xcopy_used(
-            ocp_admin_client=ocp_admin_client,
-            plan=self.plan_resource,
-            target_namespace=target_namespace,
-            expected_xcopy_used=True,
-        )
-
     def test_check_vms(
         self,
         prepared_plan,

@@ -233,7 +233,7 @@ def verify_xcopy_used(
 
     After migration, populate pods (which performed the XCOPY clone) remain as
     Completed in the target namespace. Their logs contain structured messages
-    indicating whether VAAI XCOPY acceleration was used (xcopyUsed=1) or
+    indicating whether XCOPY acceleration was used (xcopyUsed=1) or
     fallback was used (xcopyUsed=0).
 
     Args:

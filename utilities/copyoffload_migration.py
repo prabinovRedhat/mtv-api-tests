@@ -100,9 +100,6 @@ def wait_for_vmware_cloud_init_all_vms(
         source_provider (VMWareProvider): Source VMware provider instance
         source_provider_data (dict[str, Any]): Source provider configuration data
 
-    Returns:
-        None
-
     Raises:
         TimeoutExpiredError: If cloud-init does not finish within timeout
         ValueError: If guest info or IP address is unavailable
@@ -144,9 +141,6 @@ def wait_for_cloud_init(
         file_name: Full path to the file to check for (e.g., "/cloud-init.finish")
         timeout: Timeout in seconds (default: 2000)
         target_power_state: Desired power state after check ("on" or "off", default: "off")
-
-    Returns:
-        None
 
     Raises:
         TimeoutExpiredError: If cloud-init does not finish within timeout
@@ -240,9 +234,6 @@ def verify_xcopy_used(
         expected_xcopy_used (bool): Expected xcopyUsed value.
             True (xcopyUsed=1) for XCOPY-capable datastores.
             False (xcopyUsed=0) for fallback/non-XCOPY datastores.
-
-    Returns:
-        None
 
     Raises:
         ValueError: If no populate pods found or xcopyUsed not found in pod logs.

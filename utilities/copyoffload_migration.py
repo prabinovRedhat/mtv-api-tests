@@ -240,11 +240,11 @@ def verify_xcopy_used(
         AssertionError: If any disk's xcopyUsed value doesn't match expected.
     """
     plan_status = plan.instance.status
-    if not plan_status:
+    if plan_status is None:
         raise ValueError(f"Plan '{plan.name}' has no status")
 
     migration = plan_status.migration
-    if not migration:
+    if migration is None:
         raise ValueError(f"Plan '{plan.name}' has no migration in status")
 
     migration_history = migration.history

@@ -214,30 +214,17 @@ def wait_for_cloud_init(
             LOGGER.info(f"Leaving VM {vm_name} powered on")
 
 
-def verify_xcopy_used(
-    ocp_admin_client: DynamicClient,
-    plan: Plan,
-    target_namespace: str,
-    expected_xcopy_used: bool,
-) -> None:
-    """Verify xcopyUsed matches expected value for all disks in a copy-offload migration.
-
-    After migration, populate pods (which performed the XCOPY clone) remain as
-    Completed in the target namespace. Their logs contain structured messages
-    indicating whether XCOPY acceleration was used (xcopyUsed=1) or
-    fallback was used (xcopyUsed=0).
+def _get_migration_uid(plan: Plan) -> str:
+    """Extract the migration UID from a completed Plan's status.
 
     Args:
-        ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
-        plan (Plan): The Plan CR resource (used to find the migration UID).
-        target_namespace (str): Namespace where populate pods exist.
-        expected_xcopy_used (bool): Expected xcopyUsed value.
-            True (xcopyUsed=1) for XCOPY-capable datastores.
-            False (xcopyUsed=0) for fallback/non-XCOPY datastores.
+        plan (Plan): The Plan CR resource.
+
+    Returns:
+        str: The migration UID from the first history entry.
 
     Raises:
-        ValueError: If no populate pods found or xcopyUsed not found in pod logs.
-        AssertionError: If any disk's xcopyUsed value doesn't match expected.
+        ValueError: If plan status, migration, history, or UID is missing.
     """
     plan_status = plan.instance.status
     if plan_status is None:
@@ -256,35 +243,94 @@ def verify_xcopy_used(
     if not migration_ref or not migration_ref.uid:
         raise ValueError(f"Plan '{plan.name}' migration history has no migration UID")
 
-    migration_uid: str = migration_ref.uid
-    LOGGER.info(f"Checking xcopyUsed for migration '{migration_uid}'")
+    return migration_ref.uid
 
+
+def _find_populate_pods(ocp_admin_client: DynamicClient, namespace: str, migration_uid: str) -> list[Pod]:
+    """Find populate pods for a given migration.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        namespace (str): Namespace where populate pods exist.
+        migration_uid (str): Migration UID to filter pods by.
+
+    Returns:
+        list[Pod]: List of populate pods.
+
+    Raises:
+        ValueError: If no populate pods are found.
+    """
     populate_pods: list[Pod] = [
         pod
         for pod in Pod.get(
             client=ocp_admin_client,
-            namespace=target_namespace,
+            namespace=namespace,
             label_selector=f"migration={migration_uid}",
         )
         if pod.name.startswith("populate-")
     ]
 
     if not populate_pods:
-        raise ValueError(f"No populate pods found for migration '{migration_uid}' in namespace '{target_namespace}'")
+        raise ValueError(f"No populate pods found for migration '{migration_uid}' in namespace '{namespace}'")
 
+    return populate_pods
+
+
+def _parse_xcopy_used_from_log(pod: Pod) -> int:
+    """Parse the last xcopyUsed value from a populate pod's logs.
+
+    Args:
+        pod (Pod): The populate pod to read logs from.
+
+    Returns:
+        int: The last xcopyUsed value (0 or 1).
+
+    Raises:
+        ValueError: If xcopyUsed is not found in the pod logs.
+    """
+    log_content: str = pod.log()
+    matches: list[str] = re.findall(r"xcopyUsed=(\d+)", log_content)
+    if not matches:
+        raise ValueError(f"xcopyUsed not found in populate pod '{pod.name}' logs")
+
+    return int(matches[-1])
+
+
+def verify_xcopy_used(
+    ocp_admin_client: DynamicClient,
+    plan: Plan,
+    target_namespace: str,
+    expected_xcopy_used: bool,
+) -> None:
+    """Verify xcopyUsed matches expected value for all disks in a copy-offload migration.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
+        plan (Plan): The Plan CR resource (used to find the migration UID).
+        target_namespace (str): Namespace where populate pods exist.
+        expected_xcopy_used (bool): Expected xcopyUsed value.
+            True (xcopyUsed=1) for XCOPY-capable datastores.
+            False (xcopyUsed=0) for fallback/non-XCOPY datastores.
+
+    Raises:
+        ValueError: If no populate pods found or xcopyUsed not found in pod logs.
+        AssertionError: If any disk's xcopyUsed value doesn't match expected.
+    """
+    migration_uid: str = _get_migration_uid(plan=plan)
+    LOGGER.info(f"Checking xcopyUsed for migration '{migration_uid}'")
+
+    populate_pods: list[Pod] = _find_populate_pods(
+        ocp_admin_client=ocp_admin_client,
+        namespace=target_namespace,
+        migration_uid=migration_uid,
+    )
     LOGGER.info(f"Found {len(populate_pods)} populate pod(s)")
 
     expected_value: int = 1 if expected_xcopy_used else 0
 
     for pod in populate_pods:
         pvc_name: str = pod.instance.metadata.labels.get("pvcName", pod.name)
-        log_content: str = pod.log()
-
-        matches: list[str] = re.findall(r"xcopyUsed=(\d+)", log_content)
-        if not matches:
-            raise ValueError(f"xcopyUsed not found in populate pod '{pod.name}' logs")
-
-        xcopy_used: int = int(matches[-1])
+        xcopy_used: int = _parse_xcopy_used_from_log(pod=pod)
         LOGGER.info(f"Pod '{pod.name}' (PVC '{pvc_name}'): xcopyUsed={xcopy_used}")
 
         assert xcopy_used == expected_value, (

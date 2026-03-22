@@ -243,17 +243,17 @@ def verify_xcopy_used(
     if not plan_status:
         raise ValueError(f"Plan '{plan.name}' has no status")
 
-    migration = getattr(plan_status, "migration", None)
+    migration = plan_status.migration
     if not migration:
         raise ValueError(f"Plan '{plan.name}' has no migration in status")
 
-    migration_history = getattr(migration, "history", None)
+    migration_history = migration.history
     if not migration_history:
         raise ValueError(f"Plan '{plan.name}' has no migration history")
 
     first_history = migration_history[0]
-    migration_ref = getattr(first_history, "migration", None)
-    if not migration_ref or not getattr(migration_ref, "uid", None):
+    migration_ref = first_history.migration
+    if not migration_ref or not migration_ref.uid:
         raise ValueError(f"Plan '{plan.name}' migration history has no migration UID")
 
     migration_uid: str = migration_ref.uid

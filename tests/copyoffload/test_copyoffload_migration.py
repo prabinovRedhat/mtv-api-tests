@@ -2036,6 +2036,20 @@ class TestCopyoffloadIndependentNonpersistentDiskMigration:
             target_namespace=target_namespace,
         )
 
+    def test_check_xcopy_used(self, ocp_admin_client: DynamicClient, target_namespace: str) -> None:
+        """Verify XCOPY acceleration was used for all disks.
+
+        Args:
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where populate pods exist.
+        """
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
+        )
+
     def test_check_vms(
         self,
         prepared_plan,

@@ -501,9 +501,10 @@ class TestNameHere:
 - **Test ordering**: Use `@pytest.mark.incremental` at class level for sequential test dependencies
 - **5-step pattern**: storagemap -> networkmap -> plan -> migrate -> check_vms
 - **6-step copy-offload pattern**: storagemap -> networkmap -> plan -> migrate -> check_vms -> check_xcopy_used
-  Copy-offload tests extend the base pattern with `test_check_xcopy_used` which verifies XCOPY acceleration
-  via populate pod logs. This is a separate step because it validates the transfer mechanism (infrastructure),
-  not the migrated VM (application), and provides clearer failure diagnostics.
+  Copy-offload tests extend the base pattern with `test_check_xcopy_used` which calls
+  `verify_xcopy_used()` from `utilities/copyoffload_migration.py`. This is a separate step because it
+  validates the transfer mechanism (infrastructure), not the migrated VM (application), and provides
+  clearer failure diagnostics.
 
 **Test method naming:** Test methods do one step each: `test_create_storagemap`, `test_create_networkmap`, `test_create_plan`, `test_migrate_vms`, `test_check_vms`
 

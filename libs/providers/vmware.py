@@ -825,8 +825,12 @@ class VMWareProvider(BaseProvider):
                 Defaults to (0,) to preserve the OS disk.
 
         Raises:
-            ValueError: If no eligible disks are found on the VM.
+            ValueError: If the VM is not powered off or no eligible disks are found.
         """
+        power_state: str = vm.runtime.powerState
+        if power_state != "poweredOff":
+            raise ValueError(f"VM '{vm.name}' must be powered off to change disk mode, current state: '{power_state}'")
+
         disks: list[vim.vm.device.VirtualDisk] = [
             dev
             for dev in vm.config.hardware.device

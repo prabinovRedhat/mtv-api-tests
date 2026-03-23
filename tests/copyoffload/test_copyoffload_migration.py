@@ -1919,7 +1919,9 @@ class TestCopyoffloadIndependentPersistentDiskMigration:
     indirect=True,
     ids=["MTV-568:copyoffload-independent-nonpersistent"],
 )
-@pytest.mark.usefixtures("vmware_cloud_init_ready", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms")
+@pytest.mark.usefixtures(
+    "nonpersistent_disk_ready", "multus_network_name", "copyoffload_config", "cleanup_migrated_vms"
+)
 class TestCopyoffloadIndependentNonpersistentDiskMigration:
     """Copy-offload migration test - independent non-persistent disk."""
 

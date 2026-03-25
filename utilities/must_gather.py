@@ -143,13 +143,18 @@ def run_must_gather(data_collector_path: Path, plan: dict[str, str] | None = Non
     """Run ``oc adm must-gather`` to collect MTV diagnostic data.
 
     Resolves the must-gather image by looking up the IDMS mirror URL and
-    combining it with the SHA from the installed CSV. Any errors during
-    resolution are logged but do not fail the test run.
+    combining it with the SHA from the installed CSV. Always uses targeted
+    must-gather. When a plan with ``name`` is provided, scopes collection to
+    that specific plan. When only ``namespace`` is provided (multi-plan case),
+    collects all resources in the namespace. Falls back to ``mtv_namespace``
+    when no plan is provided. Any errors are logged but do not fail the test run.
 
     Args:
         data_collector_path (Path): Directory where must-gather output is written.
-        plan (dict[str, str] | None): Optional dict with ``name`` and ``namespace``
-            keys to scope the must-gather to a specific migration plan.
+        plan (dict[str, str] | None): Optional dict with ``namespace`` and
+            optionally ``name`` keys. When ``name`` is present, scopes to that
+            plan. When only ``namespace`` is present, collects the entire
+            namespace. Falls back to ``mtv_namespace`` when None.
     """
     try:
         # https://github.com/kubev2v/forklift-must-gather
@@ -172,14 +177,15 @@ def run_must_gather(data_collector_path: Path, plan: dict[str, str] | None = Non
 
         _must_gather_base_cmd = f"oc adm must-gather --image={must_gather_image} --dest-dir={data_collector_path}"
 
-        if plan:
-            plan_name = plan["name"]
-            plan_namespace = plan["namespace"]
-            run_command(
-                shlex.split(f"{_must_gather_base_cmd} -- NS={plan_namespace} PLAN={plan_name} /usr/bin/targeted"),
-                verify_stderr=False,
-            )
-        else:
-            run_command(shlex.split(f"{_must_gather_base_cmd} -- NS={mtv_namespace}"), verify_stderr=False)
+        target_ns = plan["namespace"] if plan else mtv_namespace
+        plan_name = plan.get("name") if plan else None
+        targeted_args = f"NS={target_ns}"
+        if plan_name:
+            targeted_args += f" PLAN={plan_name}"
+
+        run_command(
+            shlex.split(f"{_must_gather_base_cmd} -- {targeted_args} /usr/bin/targeted"),
+            verify_stderr=False,
+        )
     except Exception as ex:
         LOGGER.exception(f"Failed to run must-gather. {ex}")

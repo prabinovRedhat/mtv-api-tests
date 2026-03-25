@@ -359,8 +359,15 @@ def pytest_exception_interact(node, call, report):
         # Handle both function-based tests and class-based tests
         test_name = node._pyfuncitem.name if hasattr(node, "_pyfuncitem") else node.name
         plans = _session_store["teardown"].get("Plan", [])
-        plan = [plan for plan in plans if plan.get("test_name", "") == test_name]
-        plan = plan[0] if plan else None
+        matched_plans = [p for p in plans if p.get("test_name", "") == test_name]
+        if matched_plans:
+            plan = matched_plans[0]
+        elif len(plans) == 1 and "test_name" not in plans[0]:
+            plan = plans[0]
+        elif plans:
+            plan = {"namespace": plans[0]["namespace"]}
+        else:
+            plan = None
 
         run_must_gather(data_collector_path=_data_collector_path, plan=plan)
 

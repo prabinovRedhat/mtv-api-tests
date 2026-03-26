@@ -87,6 +87,8 @@ RESULTS_PATH.mkdir(exist_ok=True)
 LOGGER = logging.getLogger(__name__)
 BASIC_LOGGER = logging.getLogger("basic")
 
+_must_gather_collected_classes: set[str] = set()
+
 
 # Pytest start
 
@@ -356,18 +358,22 @@ def pytest_exception_interact(node, call, report):
         _data_collector_path = Path(
             f"{node.session.config.getoption('data_collector_path')}/{sanitize_test_name_for_path(node.name)}"
         )
-        # Handle both function-based tests and class-based tests
-        test_name = node._pyfuncitem.name if hasattr(node, "_pyfuncitem") else node.name
-        plans = _session_store["teardown"].get("Plan", [])
-        matched_plans = [p for p in plans if p.get("test_name", "") == test_name]
-        if matched_plans:
-            plan = matched_plans[0]
-        elif len(plans) == 1 and "test_name" not in plans[0]:
-            plan = plans[0]
-        elif plans:
-            plan = {"namespace": plans[0]["namespace"]}
-        else:
-            plan = None
+        plan = None
+        is_copyoffload = any(
+            marker.name in ("copyoffload", "copyoffload_snapshots") for marker in node.iter_markers()
+        )
+        if is_copyoffload:
+            class_name = node.parent.name if node.parent else node.name
+            if class_name in _must_gather_collected_classes:
+                return
+            plans = _session_store["teardown"].get("Plan", [])
+            if plans:
+                plan = plans[0]
+                _must_gather_collected_classes.add(class_name)
+                _data_collector_path = Path(
+                    f"{node.session.config.getoption('data_collector_path')}"
+                    f"/must-gather-{sanitize_test_name_for_path(class_name)}"
+                )
 
         run_must_gather(data_collector_path=_data_collector_path, plan=plan)
 

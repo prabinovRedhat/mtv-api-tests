@@ -257,7 +257,32 @@ The Quick Start runs **tier0** tests (smoke tests). You can run other test categ
 | ------ | ------------- | ----------- |
 | `tier0` | Smoke tests - critical paths | First run, quick validation |
 | `copyoffload` | Fast migrations via shared storage | Testing storage arrays |
+| `copyoffload_sanity` | Copy-offload sanity subset (see below) | Quick copy-offload validation |
 | `warm` | Warm migrations (VMs stay running) | Specific scenario testing |
+
+### Copy-Offload Sanity Tests
+
+The `copyoffload_sanity` marker selects a curated subset of copy-offload tests that cover the core
+migration scenarios. Use this marker for quick validation of copy-offload functionality without
+running the full suite. The sanity set covers:
+
+| Test ID | Test Class | What It Covers |
+| ------- | ---------- | -------------- |
+| MTV-562 | `TestCopyoffloadRdmVirtualDiskMigration` | RDM (Raw Device Mapping) virtual disk migration |
+| MTV-564 | `TestCopyoffloadMultiDatastoreMigration` | VMs with disks spread across multiple datastores |
+| MTV-565 | `TestCopyoffloadMixedDatastoreMigration` | Mixed environment - XCOPY-capable and non-XCOPY datastores with fallback |
+| MTV-572 | `TestCopyoffloadScaleMigration` | Scale migration (5 VMs concurrently) |
+| MTV-573 | `TestCopyoffload10MixedDisksMigration` | VM with 10 mixed disks (thin and thick provisioned) |
+| MTV-577 | `TestCopyoffloadWarmMigration` | Warm (live) migration with copy-offload |
+
+Together these tests validate: different disk types (thin, thick, RDM), multi-disk and multi-datastore
+layouts, mixed XCOPY/non-XCOPY fallback behavior, concurrent scale migration, and warm migration --
+providing broad coverage of copy-offload functionality in a single run.
+
+```bash
+# Run only the sanity subset
+podman run ... uv run pytest -m copyoffload_sanity -v --tc=source_provider:vsphere-8.0.1 ...
+```
 
 **Examples** - Change `-m tier0` to run different tests:
 
@@ -268,8 +293,11 @@ The Quick Start runs **tier0** tests (smoke tests). You can run other test categ
 # Warm migration tests
 podman run ... uv run pytest -m warm -v --tc=source_provider:vsphere-8.0.1 ...
 
-# Copy-offload tests
+# Copy-offload tests (full suite)
 podman run ... uv run pytest -m copyoffload -v --tc=source_provider:vsphere-8.0.1 ...
+
+# Copy-offload sanity tests (quick validation)
+podman run ... uv run pytest -m copyoffload_sanity -v --tc=source_provider:vsphere-8.0.1 ...
 
 # Combine markers
 podman run ... uv run pytest -m "tier0 or warm" -v --tc=source_provider:vsphere-8.0.1 ...
@@ -478,7 +506,7 @@ The wizard will:
 2. Connect to vSphere and let you select datastores, a test VM, and an ESXi host
 3. Prompt for storage vendor and credentials
 4. Connect to OpenShift and let you select a storage class
-5. Ask which test category to run (`all`, `copyoffload`, `tier0`, `warm`, `remote`)
+5. Ask which test category to run (`all`, `copyoffload`, `copyoffload_sanity`, `tier0`, `warm`, `remote`)
 6. Write `.providers.json` and `mtv-api-tests-manifests.yaml`
 
 > **Security Note:** The generated `mtv-api-tests-manifests.yaml` contains embedded credentials

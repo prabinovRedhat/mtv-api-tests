@@ -208,16 +208,23 @@ class OCPProvider(BaseProvider):
 
         self.start_vm(cnv_vm)
 
-        printable_status = cnv_vm.instance.status.printableStatus
-        if printable_status != cnv_vm.Status.RUNNING:
+        try:
+            for sample in TimeoutSampler(
+                wait_timeout=300,
+                sleep=5,
+                func=lambda: cnv_vm.instance.status.printableStatus,
+            ):
+                if sample == cnv_vm.Status.RUNNING:
+                    break
+        except TimeoutExpiredError:
             conditions: list[dict[str, Any]] = cnv_vm.instance.status.get("conditions", [])
             condition_details = "; ".join(
                 f"{c['type']}: {c.get('reason', '')} - {c.get('message', '')}" for c in conditions
             )
             raise ValueError(
-                f"VM '{cnv_vm_name}' in namespace '{cnv_vm_namespace}' failed to start. "
-                f"Status: '{printable_status}'. Conditions: {condition_details}"
-            )
+                f"VM '{cnv_vm_name}' in namespace '{cnv_vm_namespace}' failed to start within 300s. "
+                f"Status: '{cnv_vm.instance.status.printableStatus}'. Conditions: {condition_details}"
+            ) from None
 
         # True guest agent is reporting all ok
         result_vm_info["guest_agent_running"] = (

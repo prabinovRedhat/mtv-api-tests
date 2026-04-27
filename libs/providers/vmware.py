@@ -794,6 +794,7 @@ class VMWareProvider(BaseProvider):
                     if vimtype == [vim.Datastore] and hasattr(obj, "_moId") and obj._moId == name:
                         return obj
                 except vmodl.fault.ManagedObjectNotFound:
+                    LOGGER.debug(f"Skipping stale managed object reference while searching for '{name}'")
                     continue
 
             raise ValueError(f"Object of type {vimtype} with name '{name}' not found.")

@@ -1286,7 +1286,13 @@ class VMWareProvider(BaseProvider):
                     locator.diskBackingInfo.thinProvisioned = False
                     disk_locators.append(locator)
                 relocate_spec.disk = disk_locators
-                LOGGER.info(f"Set eagerlyScrub=True on {len(disk_locators)} disk(s) for thick-eager provisioning.")
+                if not disk_locators:
+                    LOGGER.warning(
+                        f"thick-eager requested but no FlatVer2BackingInfo disks found on '{source_vm.name}'; "
+                        f"clone will not be eager-zeroed."
+                    )
+                else:
+                    LOGGER.info(f"Set eagerlyScrub=True on {len(disk_locators)} disk(s) for thick-eager provisioning.")
 
         # Handle adding new disks - RDM disks are filtered out and added post-clone
         disks_to_add = kwargs.get("add_disks", [])

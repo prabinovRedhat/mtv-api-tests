@@ -787,8 +787,10 @@ class VMWareProvider(BaseProvider):
             managed_objects = getattr(container, "view", [])
             for obj in managed_objects:
                 try:
+                    # Check by name first
                     if obj.name == name:
                         return obj
+                    # For datastores, also check by MoRef ID
                     if vimtype == [vim.Datastore] and hasattr(obj, "_moId") and obj._moId == name:
                         return obj
                 except vmodl.fault.ManagedObjectNotFound:

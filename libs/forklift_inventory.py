@@ -141,51 +141,12 @@ class ForkliftInventory(abc.ABC):
 
         return True
 
-    def _check_vsphere_nics_synced(self, vm: dict[str, Any], vm_name: str) -> bool:
-        """Verify vSphere VM NIC data is synced to inventory.
-
-        Forklift inventory can list a cloned VM before its NIC/network details are
-        populated. VsphereForkliftInventory.vms_networks_mappings() requires non-empty
-        nics with resolvable network references, so we wait for that data here.
-
-        Args:
-            vm (dict[str, Any]): VM data from Forklift inventory
-            vm_name (str): VM name for logging
-
-        Returns:
-            bool: True if NICs are synced, False if still waiting
-        """
-        nics = vm.get("nics", [])
-        if not nics:
-            LOGGER.debug(f"VM '{vm_name}' found but has no NICs yet. Waiting for network sync.")
-            return False
-
-        try:
-            inventory_network_ids = {net["id"] for net in self.networks}
-        except (ValueError, ConnectionError, TimeoutError) as e:
-            LOGGER.warning(f"VM '{vm_name}' found but networks not yet queryable in inventory: {e}")
-            return False
-
-        for nic in nics:
-            network_id = (nic.get("network") or {}).get("id")
-            if not network_id:
-                LOGGER.debug(f"VM '{vm_name}' found but NIC missing network ID. Waiting for network sync.")
-                return False
-            if network_id not in inventory_network_ids:
-                LOGGER.debug(
-                    f"VM '{vm_name}' found but network '{network_id}' not yet in inventory. "
-                    f"Available network IDs: {inventory_network_ids}"
-                )
-                return False
-
-        return True
-
     def wait_for_vm(self, name: str, timeout: int = 300, sleep: int = 10) -> dict[str, Any]:
         """Wait for a VM to appear in the Forklift inventory after cloning.
 
-        For OpenStack VMs, also waits for attached volumes and networks to sync.
-        For vSphere VMs, waits for NIC/network data to sync. These details are synced
-        separately from VM metadata and are required for network mapping.
+        For OpenStack VMs, also waits for attached volumes and networks to sync,
+        as these are synced separately from VM metadata and are required for
+        storage/network mapping.
 
         Args:
             name: VM name to wait for
@@ -208,14 +169,12 @@ class ForkliftInventory(abc.ABC):
                 vm = self.get_vm(name=name)
                 last_vm = vm
 
+                # For OpenStack, verify volumes and networks are synced
                 if self.provider_type == Provider.ProviderType.OPENSTACK:
                     if not (
                         self._check_openstack_volumes_synced(vm, name)
                         and self._check_openstack_networks_synced(vm, name)
                     ):
-                        return None
-                elif self.provider_type == Provider.ProviderType.VSPHERE:
-                    if not self._check_vsphere_nics_synced(vm, name):
                         return None
 
                 return vm
@@ -233,11 +192,6 @@ class ForkliftInventory(abc.ABC):
                     return sample
         except TimeoutExpiredError:
             if last_vm:
-                if self.provider_type == Provider.ProviderType.VSPHERE:
-                    raise TimeoutExpiredError(
-                        f"VM '{name}' found in Forklift inventory but NIC/network data did not sync after {timeout}s. "
-                        f"NICs: {last_vm.get('nics', [])}"
-                    )
                 raise TimeoutExpiredError(
                     f"VM '{name}' found in Forklift inventory but attached volumes or networks did not sync after {timeout}s. "
                     f"Attached volumes: {last_vm.get('attachedVolumes', [])}, "

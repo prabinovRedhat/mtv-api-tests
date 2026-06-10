@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import copy
 import ipaddress
+import random
 from typing import TYPE_CHECKING, Any, Literal, Self
 
 import shortuuid
@@ -1447,21 +1448,23 @@ class VMWareProvider(BaseProvider):
             )
         except VmCloneError as e:
             if regenerate_mac and "in use" in str(e).lower():
-                LOGGER.warning("Clone failed with resource conflict, retrying without MAC regeneration")
+                LOGGER.warning(
+                    "Clone failed with resource conflict, retrying with manually assigned MAC addresses",
+                )
                 if clone_spec.config and clone_spec.config.deviceChange:
-                    non_mac_changes = [
-                        change
-                        for change in clone_spec.config.deviceChange
-                        if not isinstance(change.device, vim.vm.device.VirtualEthernetCard)
-                    ]
-                    if non_mac_changes:
-                        clone_spec.config.deviceChange = non_mac_changes
-                    else:
-                        clone_spec.config.deviceChange = []
+                    for change in clone_spec.config.deviceChange:
+                        if isinstance(change.device, vim.vm.device.VirtualEthernetCard):
+                            change.device.addressType = "manual"
+                            change.device.macAddress = self._generate_random_mac()
+                            LOGGER.info(
+                                "Assigned manual MAC %s for network device: %s",
+                                change.device.macAddress,
+                                change.device.deviceInfo.label if change.device.deviceInfo else "Unknown",
+                            )
                 task = source_vm.CloneVM_Task(folder=source_vm.parent, name=clone_vm_name, spec=clone_spec)
                 res = self.wait_task(
                     task=task,
-                    action_name=f"Cloning VM {clone_vm_name} from {source_vm_name} (retry)",
+                    action_name=f"Cloning VM {clone_vm_name} from {source_vm_name} (MAC retry)",
                     wait_timeout=60 * 20,
                     sleep=5,
                 )
@@ -1728,12 +1731,68 @@ class VMWareProvider(BaseProvider):
         task = vm.Destroy_Task()
         self.wait_task(task=task, action_name=f"Deleting VM {vm_name}")
 
+    @staticmethod
+    def _generate_random_mac() -> str:
+        """Generate a locally-administered unicast MAC address for vSphere NICs."""
+        first_octet = random.randint(0, 255) & 0xFE | 0x02
+        mac_bytes = [first_octet, *[random.randint(0, 255) for _ in range(5)]]
+        return ":".join(f"{byte:02x}" for byte in mac_bytes)
+
+    def _vms_networks_mappings_from_vsphere(
+        self,
+        names: list[str],
+        inventory: ForkliftInventory,
+    ) -> list[dict[str, str]]:
+        """Build network mappings from vSphere VM hardware when inventory NICs are missing.
+
+        Forklift inventory can list a newly cloned VM without populating its NIC data.
+        MTV NetworkMap CRs need source network names that match inventory network objects,
+        so we read NIC backing networks from vSphere and match them by name.
+        """
+        self.reconnect_if_not_connected
+        inventory_networks = inventory.networks
+        mappings: list[dict[str, str]] = []
+
+        for vm_name in names:
+            vm = self.get_obj([vim.VirtualMachine], vm_name)
+            vm_config = vm.config
+            if not vm_config or not vm_config.hardware:
+                continue
+
+            for device in vm_config.hardware.device:
+                if not isinstance(device, vim.vm.device.VirtualEthernetCard):
+                    continue
+
+                network_name = self._get_network_name_from_device(device)
+                if network_name == "Unknown":
+                    LOGGER.warning(
+                        "Could not resolve network name for VM '%s' NIC '%s'",
+                        vm_name,
+                        device.deviceInfo.label if device.deviceInfo else "Unknown",
+                    )
+                    continue
+
+                if network_name_match := [
+                    net["name"] for net in inventory_networks if network_name == net["name"]
+                ]:
+                    if not any(mapping.get("name") == network_name_match[0] for mapping in mappings):
+                        mappings.append({"name": network_name_match[0]})
+
+        if not mappings:
+            raise ValueError(
+                f"Networks not found for vms {names} on provider {Provider.ProviderType.VSPHERE} "
+                "(inventory and vSphere fallback both failed)",
+            )
+
+        LOGGER.info("Resolved network mappings from vSphere API for VMs %s: %s", names, mappings)
+        return mappings
+
     def get_vm_or_template_networks(
         self,
         names: list[str],
         inventory: ForkliftInventory,
     ) -> list[dict[str, str]]:
-        """Delegate to Forklift inventory for VMware VMs.
+        """Delegate to Forklift inventory, falling back to vSphere when NIC data is missing.
 
         Args:
             names: List of VM names to query
@@ -1742,7 +1801,16 @@ class VMWareProvider(BaseProvider):
         Returns:
             List of network mappings
         """
-        return inventory.vms_networks_mappings(vms=names)
+        try:
+            return inventory.vms_networks_mappings(vms=names)
+        except ValueError as exc:
+            LOGGER.warning(
+                "Forklift inventory network mappings unavailable for VMs %s (%s); "
+                "falling back to vSphere API",
+                names,
+                exc,
+            )
+            return self._vms_networks_mappings_from_vsphere(names=names, inventory=inventory)
 
     def wait_for_vmware_guest_info(self, vm: vim.VirtualMachine, timeout: int = 60) -> bool:
         """Wait for VMware guest information to become available after VM power-on.

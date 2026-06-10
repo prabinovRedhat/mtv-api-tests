@@ -224,6 +224,7 @@ def background(func):
 
 
 def gen_network_map_list(
+    source_provider: BaseProvider,
     source_provider_inventory: ForkliftInventory,
     target_namespace: str,
     vms: list[str],
@@ -234,7 +235,8 @@ def gen_network_map_list(
     _destination_pod: dict[str, str] = {"type": "pod"}
     multus_counter = 1
 
-    for index, network in enumerate(source_provider_inventory.vms_networks_mappings(vms=vms)):
+    networks = source_provider.get_vm_or_template_networks(names=vms, inventory=source_provider_inventory)
+    for index, network in enumerate(networks):
         if pod_only or index == 0:
             # First network or pod_only mode → pod network
             _destination = _destination_pod

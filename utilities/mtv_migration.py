@@ -382,7 +382,6 @@ def wait_for_migration_complate(
     """
     try:
         last_status: str = ""
-        logs_captured: bool = False
 
         for sample in TimeoutSampler(
             func=get_plan_migration_status,
@@ -394,11 +393,10 @@ def wait_for_migration_complate(
                 LOGGER.info(f"Plan '{plan.name}' migration status: '{sample}'")
                 last_status = sample
 
-            # Capture populate pod logs when migration is executing (before cleanup)
-            # Keep trying until we successfully capture logs (pods may not exist yet at start of Executing)
+            # Capture populate pod logs during EXECUTING phase (before MTV cleanup deletes them)
+            # Re-scan every iteration to capture pods that complete at different times (multi-pod migrations)
             if (
-                not logs_captured
-                and sample == Plan.Status.EXECUTING
+                sample == Plan.Status.EXECUTING
                 and ocp_admin_client is not None
                 and target_namespace is not None
                 and fixture_store is not None

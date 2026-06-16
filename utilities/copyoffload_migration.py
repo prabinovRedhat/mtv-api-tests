@@ -220,6 +220,37 @@ def merge_storage_secret_extra(
     return merged
 
 
+def wait_for_plan_secret(ocp_admin_client: DynamicClient, namespace: str, plan_name: str) -> None:
+    """
+    Wait for Forklift to create plan-specific secret for copy-offload.
+
+    When a Plan is created with copy-offload configuration, ForkliftController
+    should automatically create a plan-specific secret containing storage credentials.
+    This function polls for that secret's existence.
+
+    Args:
+        ocp_admin_client: OpenShift dynamic client
+        namespace: Namespace where the plan and secret exist
+        plan_name: Name of the Plan (secret will be named {plan_name}-*)
+
+    Note:
+        Times out after 60 seconds but continues anyway (logs warning).
+        The migration will fail with clearer error if secret is missing.
+    """
+    LOGGER.info("Copy-offload: waiting for Forklift to create plan-specific secret...")
+    try:
+        for _ in TimeoutSampler(
+            wait_timeout=60,
+            sleep=2,
+            func=lambda: any(
+                s.name.startswith(f"{plan_name}-") for s in Secret.get(client=ocp_admin_client, namespace=namespace)
+            ),
+        ):
+            break
+    except TimeoutExpiredError:
+        LOGGER.warning(f"Timeout waiting for plan secret '{plan_name}-*' - continuing anyway")
+
+
 def wait_for_vmware_cloud_init_all_vms(
     prepared_plan: dict[str, Any],
     source_provider: VMWareProvider,
@@ -326,7 +357,8 @@ def wait_for_cloud_init(
             try:
                 rc, _, _ = host.executor(user=user).run_cmd(["ls", file_name])
                 return rc == 0
-            except Exception as e:
+            except (ConnectionError, OSError, TimeoutError) as e:
+                # SSH/network failures during command execution
                 LOGGER.warning(f"SSH check failed for {vm_name}: {type(e).__name__}: {e} - retrying...")
                 return False
 
@@ -378,82 +410,19 @@ def _get_migration_uid(plan: Plan) -> str:
     return migration_ref.uid
 
 
-def _resolve_migration_uid(plan: Plan) -> str | None:
-    """Resolve migration UID from the Migration CR.
-
-    Returns None when the Migration CR is not created yet (e.g. during early migration polling).
-
-    Args:
-        plan (Plan): The Plan CR resource.
-
-    Returns:
-        str | None: Migration UID when the Migration CR exists, otherwise None.
-
-    Raises:
-        ValueError: If the Migration CR exists but has no UID.
-    """
-    try:
-        migration = get_migration_for_plan(plan=plan)
-    except MigrationNotFoundError:
-        return None
-
-    migration_uid = migration.instance.metadata.uid
-    if not migration_uid:
-        raise ValueError(f"Migration CR for Plan '{plan.name}' has no UID")
-    return migration_uid
-
-
-def _get_populate_pods_for_plan(
-    ocp_admin_client: DynamicClient,
-    plan: Plan,
-    target_namespace: str,
-    *,
-    require_pods: bool = True,
-) -> tuple[str, list[Pod]]:
-    """Resolve migration UID and fetch populate pods for a completed migration.
-
-    Args:
-        ocp_admin_client (DynamicClient): OpenShift admin client.
-        plan (Plan): The Plan CR resource.
-        target_namespace (str): Namespace where populate pods exist.
-        require_pods (bool): When True, raise if no populate pods are found.
-
-    Returns:
-        tuple[str, list[Pod]]: Migration UID and matching populate pods.
-
-    Raises:
-        ValueError: If migration UID or populate pods cannot be resolved.
-    """
-    migration_uid = _get_migration_uid(plan=plan)
-    populate_pods = _find_populate_pods(
-        ocp_admin_client=ocp_admin_client,
-        namespace=target_namespace,
-        migration_uid=migration_uid,
-        require_pods=require_pods,
-    )
-    return migration_uid, populate_pods
-
-
-def _find_populate_pods(
-    ocp_admin_client: DynamicClient,
-    namespace: str,
-    migration_uid: str,
-    *,
-    require_pods: bool = True,
-) -> list[Pod]:
+def _find_populate_pods(ocp_admin_client: DynamicClient, namespace: str, migration_uid: str) -> list[Pod]:
     """Find populate pods for a given migration.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.
         namespace (str): Namespace where populate pods exist.
         migration_uid (str): Migration UID to filter pods by.
-        require_pods (bool): When True, raise if no populate pods are found.
 
     Returns:
         list[Pod]: List of populate pods.
 
     Raises:
-        ValueError: If require_pods is True and no populate pods are found.
+        ValueError: If no populate pods are found.
     """
     populate_pods: list[Pod] = [
         pod
@@ -465,7 +434,7 @@ def _find_populate_pods(
         if pod.name.startswith("populate-")
     ]
 
-    if not populate_pods and require_pods:
+    if not populate_pods:
         raise ValueError(f"No populate pods found for migration '{migration_uid}' in namespace '{namespace}'")
 
     return populate_pods
@@ -542,14 +511,15 @@ def capture_populate_pod_logs(
             try:
                 pod_data: dict[str, Any] = {
                     "pod_name": pod.name,
-                    "pvc_name": pod.instance.metadata.labels.get("pvcName", pod.name),
+                    "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
                     "log_content": pod.log(),
                     "labels": dict(pod.instance.metadata.labels),
                     "phase": pod.instance.status.phase if pod.instance.status else "Unknown",
                 }
                 captured_logs.append(pod_data)
                 LOGGER.debug(f"Captured logs from populate pod '{pod.name}' (phase: {pod_data['phase']})")
-            except Exception as pod_err:
+            except ApiException as pod_err:
+                # ApiException: K8s API failures; AttributeError: missing pod attributes
                 LOGGER.warning(f"Failed to capture logs from pod '{pod.name}': {pod_err}")
 
         if captured_logs:
@@ -558,7 +528,8 @@ def capture_populate_pod_logs(
                 f"Successfully captured {len(captured_logs)} populate pod log(s) for migration '{migration_uid}'"
             )
 
-    except Exception as e:
+    except (ApiException, ValueError, KeyError) as e:
+        # ApiException: K8s API failures; ValueError: invalid migration UID; KeyError: missing fixture_store keys
         LOGGER.warning(f"Failed to capture populate pod logs for migration '{migration_uid}': {e}")
 
 
@@ -665,6 +636,58 @@ def _log_xcopy_verification_result(
     )
 
 
+def _get_populate_pod_logs(
+    ocp_admin_client: DynamicClient,
+    target_namespace: str,
+    migration_uid: str,
+    fixture_store: dict[str, Any],
+) -> list[dict[str, str]]:
+    """Get populate pod logs from cache or live pods.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
+        target_namespace (str): Namespace where populate pods exist.
+        migration_uid (str): Migration UID to find populate pods.
+        fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
+
+    Returns:
+        list[dict[str, str]]: List of pod logs with keys: pod_name, pvc_name, log_content.
+
+    Raises:
+        ValueError: If no populate pods found and no cached logs available.
+    """
+    # Try cached logs first (for MTV builds that cleanup pods quickly)
+    cached_logs: list[dict[str, Any]] | None = fixture_store.get("populate_pod_logs", {}).get(migration_uid)
+
+    if cached_logs:
+        LOGGER.info(f"Using {len(cached_logs)} cached populate pod log(s)")
+        return [
+            {
+                "pod_name": pod_data["pod_name"],
+                "pvc_name": pod_data["pvc_name"],
+                "log_content": pod_data["log_content"],
+            }
+            for pod_data in cached_logs
+        ]
+
+    # Fall back to querying live pods (for MTV builds that keep pods longer)
+    LOGGER.info("No cached logs found, querying live populate pods")
+    populate_pods: list[Pod] = _find_populate_pods(
+        ocp_admin_client=ocp_admin_client,
+        namespace=target_namespace,
+        migration_uid=migration_uid,
+    )
+    LOGGER.info(f"Found {len(populate_pods)} populate pod(s)")
+    return [
+        {
+            "pod_name": pod.name,
+            "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
+            "log_content": pod.log(),
+        }
+        for pod in populate_pods
+    ]
+
+
 def verify_xcopy_used(
     ocp_admin_client: DynamicClient,
     plan: Plan,
@@ -695,37 +718,13 @@ def verify_xcopy_used(
 
     expected_value: int = 1 if expected_xcopy_used else 0
 
-    # Try to use cached logs first (for MTV builds that cleanup pods quickly)
-    cached_logs: list[dict[str, Any]] | None = fixture_store.get("populate_pod_logs", {}).get(migration_uid)
-    pod_logs: list[dict[str, str]] = []
-
-    if cached_logs:
-        LOGGER.info(f"Using {len(cached_logs)} cached populate pod log(s)")
-        pod_logs = [
-            {
-                "pod_name": pod_data["pod_name"],
-                "pvc_name": pod_data["pvc_name"],
-                "log_content": pod_data["log_content"],
-            }
-            for pod_data in cached_logs
-        ]
-    else:
-        # Fall back to querying live pods (for MTV builds that keep pods longer)
-        LOGGER.info("No cached logs found, querying live populate pods")
-        populate_pods: list[Pod] = _find_populate_pods(
-            ocp_admin_client=ocp_admin_client,
-            namespace=target_namespace,
-            migration_uid=migration_uid,
-        )
-        LOGGER.info(f"Found {len(populate_pods)} populate pod(s)")
-        pod_logs = [
-            {
-                "pod_name": pod.name,
-                "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
-                "log_content": pod.log(),
-            }
-            for pod in populate_pods
-        ]
+    # Get populate pod logs (cached or live)
+    pod_logs: list[dict[str, str]] = _get_populate_pod_logs(
+        ocp_admin_client=ocp_admin_client,
+        target_namespace=target_namespace,
+        migration_uid=migration_uid,
+        fixture_store=fixture_store,
+    )
 
     # Verify xcopyUsed for each pod
     for pod_log in pod_logs:
@@ -833,37 +832,13 @@ def verify_xcopy_used_per_datastore(
 
     verified_datastore_ids: set[str] = set()
 
-    # Try to use cached logs first (for MTV builds that cleanup pods quickly)
-    cached_logs: list[dict[str, Any]] | None = fixture_store.get("populate_pod_logs", {}).get(migration_uid)
-    pod_logs: list[dict[str, str]] = []
-
-    if cached_logs:
-        LOGGER.info(f"Using {len(cached_logs)} cached populate pod log(s)")
-        pod_logs = [
-            {
-                "pod_name": pod_data["pod_name"],
-                "pvc_name": pod_data["pvc_name"],
-                "log_content": pod_data["log_content"],
-            }
-            for pod_data in cached_logs
-        ]
-    else:
-        # Fall back to querying live pods (for MTV builds that keep pods longer)
-        LOGGER.info("No cached logs found, querying live populate pods")
-        populate_pods: list[Pod] = _find_populate_pods(
-            ocp_admin_client=ocp_admin_client,
-            namespace=target_namespace,
-            migration_uid=migration_uid,
-        )
-        LOGGER.info(f"Found {len(populate_pods)} populate pod(s)")
-        pod_logs = [
-            {
-                "pod_name": pod.name,
-                "pvc_name": pod.instance.metadata.labels.get(PVC_NAME_LABEL, pod.name),
-                "log_content": pod.log(),
-            }
-            for pod in populate_pods
-        ]
+    # Get populate pod logs (cached or live)
+    pod_logs: list[dict[str, str]] = _get_populate_pod_logs(
+        ocp_admin_client=ocp_admin_client,
+        target_namespace=target_namespace,
+        migration_uid=migration_uid,
+        fixture_store=fixture_store,
+    )
 
     # Verify xcopyUsed per datastore for each pod
     for pod_log in pod_logs:
@@ -904,8 +879,6 @@ def verify_xcopy_used_per_datastore(
             "Migration must include at least one disk from each configured datastore; "
             f"verified datastore IDs: {sorted(verified_datastore_ids)}"
         )
-
-
 def _count_active_populator_pods_by_host(
     ocp_admin_client: DynamicClient,
     namespace: str,

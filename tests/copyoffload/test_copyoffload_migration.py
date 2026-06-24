@@ -35,6 +35,7 @@ from utilities.copyoffload_constants import (
     VM_THROTTLE_POPULATOR_INFLIGHT,
 )
 from utilities.copyoffload_migration import (
+    create_log_capture_callback,
     execute_migration_monitoring_inflight,
     execute_migration_monitoring_populator_inflight,
     verify_populator_throttling,
@@ -3688,6 +3689,7 @@ class TestCopyoffloadPopulatorThrottlingMigration:
         self,
         ocp_admin_client: DynamicClient,
         target_namespace: str,
+        fixture_store: dict[str, Any],
     ) -> None:
         """Verify sourceHost labels, PopulatorThrottled events, and observed concurrency."""
         verify_populator_throttling(
@@ -3696,6 +3698,7 @@ class TestCopyoffloadPopulatorThrottlingMigration:
             target_namespace=target_namespace,
             max_concurrent_by_host=self.max_concurrent_by_host,
             max_populator_inflight=POPULATOR_INFLIGHT_LIMIT,
+            fixture_store=fixture_store,
         )
 
     def test_check_xcopy_used(
@@ -3800,6 +3803,7 @@ class TestCopyoffloadVmThrottlingMigration(TestCopyoffloadPopulatorThrottlingMig
         self,
         ocp_admin_client: DynamicClient,
         target_namespace: str,
+        fixture_store: dict[str, Any],
     ) -> None:
         """Verify sourceHost labels, throttled events, and concurrency limits.
 
@@ -3816,6 +3820,7 @@ class TestCopyoffloadVmThrottlingMigration(TestCopyoffloadPopulatorThrottlingMig
             target_namespace=target_namespace,
             max_concurrent_by_host=self.max_concurrent_by_host,
             max_populator_inflight=VM_THROTTLE_POPULATOR_INFLIGHT,
+            fixture_store=fixture_store,
         )
         verify_vm_inflight_throttling(
             max_active_migration_vms_by_host=self.max_active_migration_vms_by_host,
@@ -4804,17 +4809,23 @@ class TestSimultaneousCopyoffloadMigrations:
         LOGGER.info("Waiting for both copyoffload migrations to complete")
         wait_for_migration_complate(
             plan=self.plan_resource_1,
-            ocp_admin_client=ocp_admin_client,
-            target_namespace=target_namespace,
-            fixture_store=fixture_store,
+            on_status_poll=create_log_capture_callback(
+                ocp_admin_client=ocp_admin_client,
+                namespace=target_namespace,
+                plan=self.plan_resource_1,
+                fixture_store=fixture_store,
+            ),
         )
         LOGGER.info("Copyoffload migration 1 completed")
 
         wait_for_migration_complate(
             plan=self.plan_resource_2,
-            ocp_admin_client=ocp_admin_client,
-            target_namespace=target_namespace,
-            fixture_store=fixture_store,
+            on_status_poll=create_log_capture_callback(
+                ocp_admin_client=ocp_admin_client,
+                namespace=target_namespace,
+                plan=self.plan_resource_2,
+                fixture_store=fixture_store,
+            ),
         )
         LOGGER.info("Copyoffload migration 2 completed")
 
@@ -5290,18 +5301,24 @@ class TestConcurrentXcopyVddkMigration:
         LOGGER.info("Waiting for XCOPY migration to complete")
         wait_for_migration_complate(
             plan=self.plan_xcopy,
-            ocp_admin_client=ocp_admin_client,
-            target_namespace=target_namespace,
-            fixture_store=fixture_store,
+            on_status_poll=create_log_capture_callback(
+                ocp_admin_client=ocp_admin_client,
+                namespace=target_namespace,
+                plan=self.plan_xcopy,
+                fixture_store=fixture_store,
+            ),
         )
         LOGGER.info("XCOPY migration completed")
 
         LOGGER.info("Waiting for VDDK migration to complete")
         wait_for_migration_complate(
             plan=self.plan_vddk,
-            ocp_admin_client=ocp_admin_client,
-            target_namespace=target_namespace,
-            fixture_store=fixture_store,
+            on_status_poll=create_log_capture_callback(
+                ocp_admin_client=ocp_admin_client,
+                namespace=target_namespace,
+                plan=self.plan_vddk,
+                fixture_store=fixture_store,
+            ),
         )
         LOGGER.info("VDDK migration completed")
 

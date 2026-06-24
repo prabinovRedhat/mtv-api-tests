@@ -27,5 +27,6 @@ VM_INFLIGHT_LIMIT = 1
 VM_THROTTLE_POPULATOR_INFLIGHT = 3
 
 SOURCE_HOST_LABEL = "sourceHost"
+PVC_NAME_LABEL = "cdi.kubevirt.io/storage.populator.pvcPrimeName"
 POPULATOR_THROTTLED_EVENT_REASON = "PopulatorThrottled"
 FORKLIFT_CONTROLLER_NAME = "forklift-controller"

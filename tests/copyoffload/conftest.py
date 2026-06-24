@@ -3,9 +3,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from typing import TYPE_CHECKING, Any
 
-import filelock
 import pytest
-from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.provider import Provider
 from ocp_resources.secret import Secret
 from simple_logger.logger import get_logger
@@ -17,6 +15,8 @@ from utilities.copyoffload_constants import (
     FORKLIFT_CONTROLLER_NAME,
     POPULATOR_INFLIGHT_LIMIT,
     SUPPORTED_VENDORS,
+    VM_INFLIGHT_LIMIT,
+    VM_THROTTLE_POPULATOR_INFLIGHT,
 )
 from utilities.copyoffload_migration import (
     get_copyoffload_credential,
@@ -25,11 +25,14 @@ from utilities.copyoffload_migration import (
 )
 from utilities.esxi import install_ssh_key_on_esxi, remove_ssh_key_from_esxi
 from utilities.forklift_controller_populator import (
-    FORKLIFT_CONTROLLER_CONDITION_TIMEOUT,
-    POPULATOR_INFLIGHT_LOCK_TIMEOUT,
+    forklift_controller_lock,
+    get_cr_populator_inflight_limit,
     get_deployment_populator_inflight_limit,
-    get_forkliftcontroller_populator_inflight_lock_path,
     populator_inflight_limit,
+)
+from utilities.forklift_controller_vm import (
+    get_cr_vm_inflight_limit,
+    vm_throttle_limits,
 )
 from utilities.resources import create_and_store_resource
 from utilities.utils import resolve_providers_json_path
@@ -188,39 +191,79 @@ def populator_inflight_forkliftcontroller(
         ValueError: If MAX_POPULATOR_INFLIGHT is not set on the populator deployment.
         TimeoutError: If the cross-worker file lock cannot be acquired within POPULATOR_INFLIGHT_LOCK_TIMEOUT seconds.
     """
-    lock_path = get_forkliftcontroller_populator_inflight_lock_path()
-    try:
-        with filelock.FileLock(lock_path, timeout=POPULATOR_INFLIGHT_LOCK_TIMEOUT):
-            forklift_controller = ForkliftController(
-                client=ocp_admin_client,
-                name=FORKLIFT_CONTROLLER_NAME,
-                namespace=mtv_namespace,
-                ensure_exists=True,
-            )
-            forklift_controller.wait_for_condition(
-                status=forklift_controller.Condition.Status.TRUE,
-                condition=forklift_controller.Condition.Type.RUNNING,
-                timeout=FORKLIFT_CONTROLLER_CONDITION_TIMEOUT,
-            )
+    with forklift_controller_lock(
+        ocp_admin_client=ocp_admin_client,
+        mtv_namespace=mtv_namespace,
+        lock_reason="the populator throttling test",
+        forklift_controller_name=FORKLIFT_CONTROLLER_NAME,
+    ) as forklift_controller:
+        original_deployment_limit = get_deployment_populator_inflight_limit(
+            ocp_admin_client=ocp_admin_client,
+            mtv_namespace=mtv_namespace,
+        )
 
-            original_deployment_limit = get_deployment_populator_inflight_limit(
-                ocp_admin_client=ocp_admin_client,
-                mtv_namespace=mtv_namespace,
-            )
+        with populator_inflight_limit(
+            forklift_controller=forklift_controller,
+            ocp_admin_client=ocp_admin_client,
+            mtv_namespace=mtv_namespace,
+            test_limit=POPULATOR_INFLIGHT_LIMIT,
+            original_deployment_limit=original_deployment_limit,
+        ):
+            yield
 
-            with populator_inflight_limit(
-                forklift_controller=forklift_controller,
-                ocp_admin_client=ocp_admin_client,
-                mtv_namespace=mtv_namespace,
-                test_limit=POPULATOR_INFLIGHT_LIMIT,
-                original_deployment_limit=original_deployment_limit,
-            ):
-                yield
-    except filelock.Timeout as err:
-        raise TimeoutError(
-            f"Timeout ({POPULATOR_INFLIGHT_LOCK_TIMEOUT}s) waiting for ForkliftController populator-inflight lock at {lock_path}. "
-            "Another worker may be running the populator throttling test."
-        ) from err
+
+@pytest.fixture(scope="class")
+def vm_inflight_forkliftcontroller(
+    ocp_admin_client: "DynamicClient",
+    mtv_namespace: str,
+) -> Generator[None, None, None]:
+    """Set ForkliftController VM and populator in-flight limits for the test class and restore after.
+
+    Patches ``controller_max_vm_inflight`` to ``VM_INFLIGHT_LIMIT`` (1) and
+    ``controller_max_populator_inflight`` to ``VM_THROTTLE_POPULATOR_INFLIGHT`` (3) for
+    the class, then restores both to their pre-test values on teardown. The same file lock
+    used by ``populator_inflight_forkliftcontroller`` serializes ForkliftController changes
+    across pytest-xdist workers for the full class duration.
+
+    This fixture mutates cluster-wide MTV migration settings. Do not run VM throttling tests
+    in parallel with other tests that depend on the default ForkliftController limits.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        mtv_namespace (str): Namespace where ForkliftController is installed.
+
+    Yields:
+        None
+
+    Raises:
+        ValueError: If MAX_POPULATOR_INFLIGHT is not set on the populator deployment.
+        TimeoutError: If the cross-worker file lock cannot be acquired within
+            POPULATOR_INFLIGHT_LOCK_TIMEOUT seconds.
+    """
+    with forklift_controller_lock(
+        ocp_admin_client=ocp_admin_client,
+        mtv_namespace=mtv_namespace,
+        lock_reason="a throttling test",
+        forklift_controller_name=FORKLIFT_CONTROLLER_NAME,
+    ) as forklift_controller:
+        original_vm_limit = get_cr_vm_inflight_limit(forklift_controller=forklift_controller)
+        original_cr_populator_limit = get_cr_populator_inflight_limit(forklift_controller=forklift_controller)
+        original_deployment_limit = get_deployment_populator_inflight_limit(
+            ocp_admin_client=ocp_admin_client,
+            mtv_namespace=mtv_namespace,
+        )
+
+        with vm_throttle_limits(
+            forklift_controller=forklift_controller,
+            ocp_admin_client=ocp_admin_client,
+            mtv_namespace=mtv_namespace,
+            test_vm_limit=VM_INFLIGHT_LIMIT,
+            test_populator_limit=VM_THROTTLE_POPULATOR_INFLIGHT,
+            original_vm_limit=original_vm_limit,
+            original_cr_populator_limit=original_cr_populator_limit,
+            original_deployment_populator_limit=original_deployment_limit,
+        ):
+            yield
 
 
 @pytest.fixture(scope="class")

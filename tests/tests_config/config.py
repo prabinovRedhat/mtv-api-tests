@@ -1,4 +1,6 @@
 import uuid
+from copy import deepcopy
+from typing import Any
 
 global config
 
@@ -13,6 +15,20 @@ remote_ocp_cluster: str = ""
 snapshots_interval: int = 2
 mins_before_cutover: int = 5
 plan_wait_timeout: int = 3600
+
+_VM_THROTTLING_ADD_DISKS: list[dict[str, Any]] = [
+    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+]
+_VM_THROTTLING_TEMPLATE: dict[str, Any] = {
+    "name": "xcopy-template-test",
+    "guest_agent": True,
+    "clone": True,
+    "disk_type": "thin",
+    "add_disks": _VM_THROTTLING_ADD_DISKS,
+}
 tests_params: dict = {
     "test_sanity_warm_mtv_migration": {
         "virtual_machines": [
@@ -353,20 +369,12 @@ tests_params: dict = {
         "copyoffload": True,
     },
     "test_copyoffload_populator_throttling_migration": {
-        "virtual_machines": [
-            {
-                "name": "xcopy-template-test",
-                "guest_agent": True,
-                "clone": True,
-                "disk_type": "thin",
-                "add_disks": [
-                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
-                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
-                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
-                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
-                ],
-            },
-        ],
+        "virtual_machines": [deepcopy(_VM_THROTTLING_TEMPLATE)],
+        "warm_migration": False,
+        "copyoffload": True,
+    },
+    "test_copyoffload_vm_throttling_migration": {
+        "virtual_machines": [deepcopy(_VM_THROTTLING_TEMPLATE) for _ in range(3)],
         "warm_migration": False,
         "copyoffload": True,
     },

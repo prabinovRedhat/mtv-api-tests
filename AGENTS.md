@@ -798,11 +798,20 @@ class TestNameHere:
   `test_check_xcopy_used`. This step calls `verify_populator_throttling()` from `utilities/copyoffload_migration.py`
   to validate per-ESXi-host concurrency limits, `PopulatorThrottled` events, and `sourceHost` labels.
   Requires the `populator_inflight_forkliftcontroller` fixture.
+- **7-step VM throttling pattern**: storagemap -> networkmap -> plan -> migrate -> `verify_populator_throttling` -> check_xcopy_used -> check_vms
+  VM throttling tests insert `test_verify_populator_throttling` after `test_migrate_vms`. `test_migrate_vms` calls
+  `execute_migration_monitoring_inflight(max_populator_inflight=VM_THROTTLE_POPULATOR_INFLIGHT, max_vm_inflight=VM_INFLIGHT_LIMIT)`
+  to monitor both populate pod and active VM concurrency per host. `test_verify_populator_throttling` calls
+  `verify_populator_throttling()` (asserts populator peak ≤ `VM_THROTTLE_POPULATOR_INFLIGHT` (3) and returns
+  `source_host`) then `verify_vm_inflight_throttling()` (asserts VM peak ≤ `VM_INFLIGHT_LIMIT` (1) on that host).
+  Requires the `vm_inflight_forkliftcontroller` fixture, which sets both `controller_max_vm_inflight = 1` and
+  `controller_max_populator_inflight = 3` on ForkliftController.
 
 **Test method naming:** Base tests: `test_create_storagemap`, `test_create_networkmap`, `test_create_plan`,
 `test_migrate_vms`, `test_check_vms`. Copy-offload tests: same through `test_migrate_vms`, then
 `test_check_xcopy_used`, `test_check_vms`. Copy-offload throttling tests: same through `test_migrate_vms`, then
-`test_verify_populator_throttling`, `test_check_xcopy_used`, `test_check_vms`.
+`test_verify_populator_throttling`, `test_check_xcopy_used`, `test_check_vms`. VM throttling tests: same through
+`test_migrate_vms`, then `test_verify_populator_throttling`, `test_check_xcopy_used`, `test_check_vms`.
 
 **Fixture parameters:** Each test method requests only the fixtures it needs. The example shows typical patterns.
 
@@ -823,7 +832,8 @@ tests_params: dict = {
 2. Create a test class with `@pytest.mark.parametrize` using `class_plan_config` and `indirect=True`
 3. Add pytest markers at class level (tier0, warm, remote, copyoffload)
 4. Implement the 5 test methods following the pattern above (6 for copy-offload tests — use the 6-step copy-offload pattern;
-   7 for copy-offload populator throttling tests — use the 7-step copy-offload throttling pattern)
+   7 for copy-offload populator throttling tests — use the 7-step copy-offload throttling pattern;
+   7 for copy-offload VM throttling tests — use the 7-step VM throttling pattern (same populator monitoring, different controller limits)
 
 **VM Configuration Options:**
 

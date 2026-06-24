@@ -5,11 +5,14 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import filelock
+from kubernetes.dynamic.exceptions import DynamicApiError
 from ocp_resources.deployment import Deployment
 from ocp_resources.forklift_controller import ForkliftController
 from ocp_resources.resource import ResourceEditor
@@ -25,6 +28,28 @@ POPULATOR_CONTROLLER_DEPLOYMENT = "forklift-volume-populator-controller"
 MAX_POPULATOR_INFLIGHT_ENV = "MAX_POPULATOR_INFLIGHT"
 POPULATOR_INFLIGHT_LOCK_TIMEOUT = 3600  # seconds; covers full 7-step class including migration
 FORKLIFT_CONTROLLER_CONDITION_TIMEOUT = 300  # seconds to wait for ForkliftController reconciliation
+FORKLIFT_CONTROLLER_CLUSTER_LOCK_NAME = "forklift-controller-limit-lock"
+
+
+def parse_forklift_controller_int_field(raw_value: Any, field_name: str) -> int | None:
+    """Parse a ForkliftController CR spec integer field.
+
+    Args:
+        raw_value (Any): Value from the ForkliftController CR spec.
+        field_name (str): Field name, used in the error message.
+
+    Returns:
+        int | None: Parsed value, or None when the field is unset.
+
+    Raises:
+        ValueError: If the API returns a non-integer value.
+    """
+    if raw_value is None:
+        return None
+    try:
+        return int(raw_value)
+    except (ValueError, TypeError) as err:
+        raise ValueError(f"{field_name} on ForkliftController has non-integer value {raw_value!r}") from err
 
 
 def _controller_max_populator_inflight_as_int(raw_value: Any) -> int | None:
@@ -39,14 +64,7 @@ def _controller_max_populator_inflight_as_int(raw_value: Any) -> int | None:
     Raises:
         ValueError: If the API returns a non-integer value.
     """
-    if raw_value is None:
-        return None
-    try:
-        return int(raw_value)
-    except (ValueError, TypeError) as err:
-        raise ValueError(
-            f"controller_max_populator_inflight on ForkliftController has non-integer value {raw_value!r}"
-        ) from err
+    return parse_forklift_controller_int_field(raw_value, "controller_max_populator_inflight")
 
 
 def ensure_secure_shared_lock_dir(lock_dir: Path) -> None:
@@ -96,6 +114,197 @@ def get_forkliftcontroller_populator_inflight_lock_path() -> Path:
     lock_dir = Path(tempfile.gettempdir()) / "pytest-shared-forklift"
     ensure_secure_shared_lock_dir(lock_dir=lock_dir)
     return lock_dir / "populator-inflight.lock"
+
+
+def _is_not_found_error(err: DynamicApiError) -> bool:
+    """Return whether a DynamicApiError indicates a missing resource."""
+    return "NotFound" in str(err) or "404" in str(err)
+
+
+def _is_already_exists_error(err: DynamicApiError) -> bool:
+    """Return whether a DynamicApiError indicates resource already exists."""
+    return "AlreadyExists" in str(err) or "409" in str(err)
+
+
+def _extract_configmap_data(configmap_obj: Any) -> dict[str, str]:
+    """Extract ConfigMap ``data`` as a dict from dynamic client objects."""
+    data = getattr(configmap_obj, "data", None)
+    if isinstance(data, dict):
+        return data
+    if isinstance(configmap_obj, dict):
+        raw_data = configmap_obj.get("data")
+        if isinstance(raw_data, dict):
+            return raw_data
+    return {}
+
+
+@contextmanager
+def cluster_forklift_controller_lock(
+    ocp_admin_client: DynamicClient,
+    mtv_namespace: str,
+    lock_reason: str,
+) -> Generator[None, None, None]:
+    """Acquire a cluster-scoped lock for ForkliftController limit mutations.
+
+    Uses a ConfigMap mutex in ``mtv_namespace`` so concurrent jobs on different runners
+    cannot patch cluster-global ForkliftController limits at the same time.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        mtv_namespace (str): Namespace where the lock ConfigMap is created.
+        lock_reason (str): Human-readable reason included in timeout errors.
+
+    Yields:
+        None
+
+    Raises:
+        TimeoutError: If cluster lock acquisition times out.
+        DynamicApiError: If lock operations fail with an unexpected API error.
+    """
+    lock_owner = f"{os.uname().nodename}:{os.getpid()}"
+    configmap_resource = ocp_admin_client.resources.get(api_version="v1", kind="ConfigMap")
+    acquired = False
+    lock_state: dict[str, str] = {}
+
+    def _try_acquire_cluster_lock() -> bool:
+        nonlocal acquired, lock_state
+        lock_data: dict[str, str] = {
+            "owner": lock_owner,
+            "reason": lock_reason,
+            "created_epoch": str(time.time()),
+        }
+        lock_payload = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": FORKLIFT_CONTROLLER_CLUSTER_LOCK_NAME, "namespace": mtv_namespace},
+            "data": lock_data,
+        }
+        try:
+            configmap_resource.create(namespace=mtv_namespace, body=lock_payload)
+            acquired = True
+            lock_state = lock_data
+            LOGGER.debug(
+                f"Acquired cluster lock {FORKLIFT_CONTROLLER_CLUSTER_LOCK_NAME} "
+                f"for ForkliftController mutation ({lock_reason})"
+            )
+            return True
+        except DynamicApiError as err:
+            if not _is_already_exists_error(err):
+                raise
+
+        try:
+            existing_lock = configmap_resource.get(
+                name=FORKLIFT_CONTROLLER_CLUSTER_LOCK_NAME,
+                namespace=mtv_namespace,
+            )
+        except DynamicApiError as err:
+            if _is_not_found_error(err):
+                return False
+            raise
+
+        lock_state = _extract_configmap_data(configmap_obj=existing_lock)
+        LOGGER.debug(
+            f"Cluster lock {FORKLIFT_CONTROLLER_CLUSTER_LOCK_NAME} is held by "
+            f"{lock_state.get('owner')!r}; waiting for release"
+        )
+        return False
+
+    try:
+        for lock_acquired in TimeoutSampler(
+            wait_timeout=POPULATOR_INFLIGHT_LOCK_TIMEOUT,
+            sleep=2,
+            func=_try_acquire_cluster_lock,
+        ):
+            if lock_acquired:
+                yield
+                return
+    except TimeoutExpiredError as err:
+        current_owner = lock_state.get("owner")
+        current_reason = lock_state.get("reason")
+        raise TimeoutError(
+            f"Timeout ({POPULATOR_INFLIGHT_LOCK_TIMEOUT}s) waiting for cluster lock "
+            f"{FORKLIFT_CONTROLLER_CLUSTER_LOCK_NAME} in namespace {mtv_namespace} "
+            f"(owner={current_owner!r}, reason={current_reason!r}). "
+            f"Another job may be running {lock_reason}."
+        ) from err
+    finally:
+        if not acquired:
+            return
+        try:
+            current_lock = configmap_resource.get(
+                name=FORKLIFT_CONTROLLER_CLUSTER_LOCK_NAME,
+                namespace=mtv_namespace,
+            )
+        except DynamicApiError as err:
+            if _is_not_found_error(err):
+                return
+            raise
+
+        current_lock_data = _extract_configmap_data(configmap_obj=current_lock)
+        if current_lock_data.get("owner") != lock_owner:
+            LOGGER.warning(
+                f"Cluster lock {FORKLIFT_CONTROLLER_CLUSTER_LOCK_NAME} owner changed from "
+                f"{lock_owner!r} to {current_lock_data.get('owner')!r}; skipping release delete"
+            )
+            return
+
+        try:
+            configmap_resource.delete(
+                name=FORKLIFT_CONTROLLER_CLUSTER_LOCK_NAME,
+                namespace=mtv_namespace,
+            )
+        except DynamicApiError as err:
+            if not _is_not_found_error(err):
+                raise
+
+
+@contextmanager
+def forklift_controller_lock(
+    ocp_admin_client: DynamicClient,
+    mtv_namespace: str,
+    lock_reason: str,
+    forklift_controller_name: str = "forklift-controller",
+) -> Generator[ForkliftController, None, None]:
+    """Yield ForkliftController under local and cluster-scoped locks.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        mtv_namespace (str): Namespace where ForkliftController is installed.
+        lock_reason (str): Human-readable reason included in timeout errors.
+        forklift_controller_name (str): ForkliftController resource name.
+
+    Yields:
+        ForkliftController: ForkliftController resource after RUNNING condition is observed.
+
+    Raises:
+        TimeoutError: If lock acquisition times out.
+        DynamicApiError: If cluster lock operations fail unexpectedly.
+    """
+    lock_path = get_forkliftcontroller_populator_inflight_lock_path()
+    try:
+        with filelock.FileLock(lock_path, timeout=POPULATOR_INFLIGHT_LOCK_TIMEOUT):
+            with cluster_forklift_controller_lock(
+                ocp_admin_client=ocp_admin_client,
+                mtv_namespace=mtv_namespace,
+                lock_reason=lock_reason,
+            ):
+                forklift_controller = ForkliftController(
+                    client=ocp_admin_client,
+                    name=forklift_controller_name,
+                    namespace=mtv_namespace,
+                    ensure_exists=True,
+                )
+                forklift_controller.wait_for_condition(
+                    status=forklift_controller.Condition.Status.TRUE,
+                    condition=forklift_controller.Condition.Type.RUNNING,
+                    timeout=FORKLIFT_CONTROLLER_CONDITION_TIMEOUT,
+                )
+                yield forklift_controller
+    except filelock.Timeout as err:
+        raise TimeoutError(
+            f"Timeout ({POPULATOR_INFLIGHT_LOCK_TIMEOUT}s) waiting for ForkliftController lock at {lock_path}. "
+            f"Another worker may be running {lock_reason}."
+        ) from err
 
 
 def get_populator_inflight_from_deployment(deployment: Deployment) -> str | None:
@@ -213,7 +422,7 @@ def get_deployment_populator_inflight_limit(
         ) from err
 
 
-def _get_cr_populator_limit(forklift_controller: ForkliftController) -> int | None:
+def get_cr_populator_inflight_limit(forklift_controller: ForkliftController) -> int | None:
     """Return controller_max_populator_inflight from the ForkliftController CR as an integer.
 
     Args:
@@ -263,7 +472,7 @@ def _ensure_forklift_controller_populator_limit(
         forklift_controller (ForkliftController): ForkliftController resource to patch.
         target_limit (int): Desired controller_max_populator_inflight value.
     """
-    if _get_cr_populator_limit(forklift_controller=forklift_controller) == target_limit:
+    if get_cr_populator_inflight_limit(forklift_controller=forklift_controller) == target_limit:
         return
 
     ResourceEditor(patches={forklift_controller: {"spec": {"controller_max_populator_inflight": target_limit}}}).update(
@@ -298,7 +507,7 @@ def populator_inflight_limit(
         test_limit (int): Limit to apply for the test (e.g. POPULATOR_INFLIGHT_LIMIT).
         original_deployment_limit (int): MAX_POPULATOR_INFLIGHT value before the test.
     """
-    cr_limit_int = _get_cr_populator_limit(forklift_controller=forklift_controller)
+    cr_limit_int = get_cr_populator_inflight_limit(forklift_controller=forklift_controller)
 
     # Early return when CR and deployment already match the test and restore targets.
     if cr_limit_int == test_limit == original_deployment_limit:

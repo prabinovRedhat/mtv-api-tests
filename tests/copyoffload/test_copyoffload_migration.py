@@ -29,10 +29,16 @@ from simple_logger.logger import get_logger
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from utilities.copyoffload_constants import POPULATOR_INFLIGHT_LIMIT
+from utilities.copyoffload_constants import (
+    POPULATOR_INFLIGHT_LIMIT,
+    VM_INFLIGHT_LIMIT,
+    VM_THROTTLE_POPULATOR_INFLIGHT,
+)
 from utilities.copyoffload_migration import (
+    execute_migration_monitoring_inflight,
     execute_migration_monitoring_populator_inflight,
     verify_populator_throttling,
+    verify_vm_inflight_throttling,
     verify_xcopy_used,
     verify_xcopy_used_per_datastore,
 )
@@ -3672,6 +3678,89 @@ class TestCopyoffloadPopulatorThrottlingMigration:
         )
         verify_vm_disk_count(
             destination_provider=destination_provider, plan=prepared_plan, target_namespace=target_namespace
+        )
+
+
+@pytest.mark.vsphere
+@pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_vm_throttling_migration"])],
+    indirect=True,
+    ids=["MTV-777:copyoffload-vm-throttling"],
+)
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "copyoffload_config",
+    "vm_inflight_forkliftcontroller",
+    "copyoffload_ssh_key",
+    "cleanup_migrated_vms",
+)
+class TestCopyoffloadVmThrottlingMigration(TestCopyoffloadPopulatorThrottlingMigration):
+    """Copy-offload migration (MTV-777): VM-level scheduler throttling with populator concurrency.
+
+    Covers MTV-777:
+    - Set controller_max_vm_inflight to 1 on ForkliftController (1 VM per ESXi host at a time)
+    - Set controller_max_populator_inflight to 3 (populator throttling limit alongside vm throttling)
+    - Migrate 3 VMs, each with 4 additional disks, from a single ESXi host
+    - Verify peak populator concurrency per host respects the populator limit (≤ 3)
+    - Verify peak concurrent active VMs per host respects the VM in-flight limit (≤ 1)
+    - Restore both limits to their pre-test values after the class completes
+    """
+
+    max_active_migration_vms_by_host: dict[str, int]
+
+    def test_migrate_vms(
+        self,
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+    ) -> None:
+        """Execute migration while monitoring populator and VM-level in-flight concurrency.
+
+        Args:
+            fixture_store (dict[str, Any]): Fixture store for created resources.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where migration resources are created.
+        """
+        (
+            self.__class__.max_concurrent_by_host,
+            self.__class__.max_active_migration_vms_by_host,
+        ) = execute_migration_monitoring_inflight(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            max_populator_inflight=VM_THROTTLE_POPULATOR_INFLIGHT,
+            max_vm_inflight=VM_INFLIGHT_LIMIT,
+        )
+
+    def test_verify_populator_throttling(
+        self,
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+    ) -> None:
+        """Verify sourceHost labels, throttled events, and concurrency limits.
+
+        Args:
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where migration resources are created.
+
+        Raises:
+            ValueError: If throttling signals or concurrency limits are violated.
+        """
+        source_host = verify_populator_throttling(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            max_concurrent_by_host=self.max_concurrent_by_host,
+            max_populator_inflight=VM_THROTTLE_POPULATOR_INFLIGHT,
+        )
+        verify_vm_inflight_throttling(
+            max_active_migration_vms_by_host=self.max_active_migration_vms_by_host,
+            max_vm_inflight=VM_INFLIGHT_LIMIT,
+            expected_source_host=source_host,
         )
 
 

@@ -43,6 +43,23 @@ LOGGER = get_logger(__name__)
 
 STORAGE_SECRET_EXTRA_ENV = "COPYOFFLOAD_STORAGE_SECRET_EXTRA"  # pragma: allowlist secret
 _ACTIVE_POPULATOR_POD_PHASES = frozenset({"Running", "Pending"})
+_ACTIVE_MTV_VM_PHASES = frozenset({"pending", "running", "executing"})
+_UNRESOLVED_VM_SOURCE_HOST = "__unresolved_vm_source_host__"
+
+
+def _get_field_value(obj: Any, field_name: str) -> Any:
+    """Return a field value from either a dict-like or attribute-based object.
+
+    Args:
+        obj (Any): Object that may expose fields as dict keys or attributes.
+        field_name (str): Field name to resolve.
+
+    Returns:
+        Any: Field value, or None when not found.
+    """
+    if isinstance(obj, dict):
+        return obj.get(field_name)
+    return getattr(obj, field_name, None)
 
 
 def get_copyoffload_credential(
@@ -784,6 +801,7 @@ class _PopulatorConcurrencyTracker:
         ocp_admin_client: DynamicClient,
         target_namespace: str,
         max_populator_inflight: int,
+        max_vm_inflight: int | None = None,
     ) -> None:
         """Initialize tracker state for one migration execution.
 
@@ -792,13 +810,18 @@ class _PopulatorConcurrencyTracker:
             ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
             target_namespace (str): Namespace where populate pods exist.
             max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+            max_vm_inflight (int | None): Expected ForkliftController VM in-flight limit.
+                When None, VM concurrency is not monitored.
         """
         self._plan = plan
         self._ocp_admin_client = ocp_admin_client
         self._target_namespace = target_namespace
         self._max_populator_inflight = max_populator_inflight
+        self._max_vm_inflight = max_vm_inflight
         self._migration_uid: str | None = None
         self._max_concurrent_by_host: dict[str, int] = defaultdict(int)
+        self._max_active_migration_vms_by_host: dict[str, int] = defaultdict(int)
+        self._max_unresolved_vm_source_host_count = 0
 
     def poll(self, _status: str) -> None:
         """Update peak concurrency counters for one migration status poll.
@@ -825,6 +848,25 @@ class _PopulatorConcurrencyTracker:
                     f"(limit={self._max_populator_inflight})"
                 )
 
+        if self._max_vm_inflight is None:
+            return
+
+        active_migration_vms_by_host = _count_active_migration_vms_by_host(plan=self._plan)
+        unresolved_vm_source_host_count = active_migration_vms_by_host.pop(_UNRESOLVED_VM_SOURCE_HOST, 0)
+        self._max_unresolved_vm_source_host_count = max(
+            self._max_unresolved_vm_source_host_count,
+            unresolved_vm_source_host_count,
+        )
+        for source_host, active_vm_count in active_migration_vms_by_host.items():
+            self._max_active_migration_vms_by_host[source_host] = max(
+                self._max_active_migration_vms_by_host[source_host], active_vm_count
+            )
+            if active_vm_count > self._max_vm_inflight:
+                LOGGER.warning(
+                    f"Active migration VM concurrency for host '{source_host}' is {active_vm_count} "
+                    f"(limit={self._max_vm_inflight})"
+                )
+
     @property
     def results(self) -> dict[str, int]:
         """Peak concurrent active populate pods observed per sourceHost label.
@@ -833,6 +875,175 @@ class _PopulatorConcurrencyTracker:
             dict[str, int]: Peak active populator pod count per ESXi source host.
         """
         return dict(self._max_concurrent_by_host)
+
+    @property
+    def vm_results(self) -> dict[str, int]:
+        """Peak concurrent active migrating VMs observed per sourceHost label.
+
+        Returns:
+            dict[str, int]: Peak active migration VM count per source host.
+        """
+        vm_results = dict(self._max_active_migration_vms_by_host)
+        if self._max_unresolved_vm_source_host_count:
+            vm_results[_UNRESOLVED_VM_SOURCE_HOST] = self._max_unresolved_vm_source_host_count
+        return vm_results
+
+
+def _is_vm_status_active(vm_status: Any) -> bool:
+    """Return whether an MTV VM migration status entry appears actively migrating.
+
+    Args:
+        vm_status (Any): One item from ``plan.instance.status.migration.vms``.
+
+    Returns:
+        bool: True when the VM appears to be actively migrating.
+    """
+    vm_phase = _get_field_value(vm_status, "phase")
+    if isinstance(vm_phase, str) and vm_phase.lower() in _ACTIVE_MTV_VM_PHASES:
+        return True
+
+    vm_status_text = _get_field_value(vm_status, "status")
+    if isinstance(vm_status_text, str) and vm_status_text.lower() in _ACTIVE_MTV_VM_PHASES:
+        return True
+
+    pipeline_steps = _get_field_value(vm_status, "pipeline") or []
+    for pipeline_step in pipeline_steps:
+        step_phase = _get_field_value(pipeline_step, "phase")
+        if isinstance(step_phase, str) and step_phase.lower() in _ACTIVE_MTV_VM_PHASES:
+            return True
+
+        started = _get_field_value(pipeline_step, "started")
+        completed = _get_field_value(pipeline_step, "completed")
+        if started and not completed:
+            return True
+
+    return False
+
+
+def _resolve_source_host_for_vm_status(vm_status: Any) -> str:
+    """Resolve the VM's source host from migration status fields.
+
+    Args:
+        vm_status (Any): One item from ``plan.instance.status.migration.vms``.
+
+    Returns:
+        str: Source host label value.
+
+    Raises:
+        ValueError: If source host cannot be resolved from migration status fields.
+    """
+    direct_host = (
+        _get_field_value(vm_status, "sourceHost")
+        or _get_field_value(vm_status, "source_host")
+        or _get_field_value(vm_status, "host")
+    )
+    if isinstance(direct_host, str) and direct_host:
+        return direct_host
+
+    source_data = _get_field_value(vm_status, "source")
+    nested_host = (
+        _get_field_value(source_data, "host")
+        or _get_field_value(source_data, "sourceHost")
+        or _get_field_value(source_data, "source_host")
+    )
+    if isinstance(nested_host, str) and nested_host:
+        return nested_host
+
+    vm_name = _get_field_value(vm_status, "name") or _get_field_value(vm_status, "id") or "<unknown-vm>"
+    raise ValueError(f"Unable to resolve source host for migration status entry {vm_name!r}")
+
+
+def _count_active_migration_vms_by_host(plan: Plan) -> dict[str, int]:
+    """Count active migrating VMs per source host from Plan migration status.
+
+    Args:
+        plan (Plan): Plan resource with migration status populated by MTV.
+
+    Returns:
+        dict[str, int]: Active migration VM count per source host.
+    """
+    counts: dict[str, int] = defaultdict(int)
+    unresolved_vm_names: set[str] = set()
+
+    plan_status = _get_field_value(plan.instance, "status")
+    migration_status = _get_field_value(plan_status, "migration")
+    vm_statuses = _get_field_value(migration_status, "vms") or []
+
+    for vm_status in vm_statuses:
+        if not _is_vm_status_active(vm_status=vm_status):
+            continue
+        try:
+            source_host = _resolve_source_host_for_vm_status(vm_status=vm_status)
+        except ValueError:
+            vm_name = _get_field_value(vm_status, "name") or _get_field_value(vm_status, "id") or "<unknown-vm>"
+            unresolved_vm_names.add(str(vm_name))
+            continue
+        counts[source_host] += 1
+
+    if unresolved_vm_names:
+        counts[_UNRESOLVED_VM_SOURCE_HOST] = len(unresolved_vm_names)
+        LOGGER.debug(
+            f"Could not resolve source host for {len(unresolved_vm_names)} active migration VM(s): "
+            f"{sorted(unresolved_vm_names)}"
+        )
+
+    return dict(counts)
+
+
+def execute_migration_monitoring_inflight(
+    ocp_admin_client: DynamicClient,
+    fixture_store: dict[str, Any],
+    plan: Plan,
+    target_namespace: str,
+    max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
+    max_vm_inflight: int | None = None,
+    cut_over: datetime | None = None,
+) -> tuple[dict[str, int], dict[str, int]]:
+    """Execute migration and monitor both populator and VM in-flight concurrency.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
+        fixture_store (dict[str, Any]): Fixture store for resource tracking and cleanup.
+        plan (Plan): The Plan CR resource defining the migration configuration.
+        target_namespace (str): Target namespace for the Migration CR.
+        max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+        max_vm_inflight (int | None): Expected ForkliftController VM in-flight limit.
+            When None, VM in-flight monitoring is disabled.
+        cut_over (datetime | None): Cut-over datetime for warm migration. Defaults to None.
+
+    Returns:
+        tuple[dict[str, int], dict[str, int]]: Peak concurrent active populate pods and
+            peak active migrating VMs observed per source host.
+
+    Raises:
+        MigrationPlanExecError: If migration fails or times out.
+        TimeoutError: If a copy-offload plan populator secret is not created in time.
+    """
+    create_and_store_resource(
+        client=ocp_admin_client,
+        fixture_store=fixture_store,
+        resource=Migration,
+        namespace=target_namespace,
+        plan_name=plan.name,
+        plan_namespace=plan.namespace,
+        cut_over=cut_over,
+    )
+
+    wait_for_copyoffload_plan_secret(
+        ocp_admin_client=ocp_admin_client,
+        plan=plan,
+        namespace=target_namespace,
+    )
+
+    tracker = _PopulatorConcurrencyTracker(
+        plan=plan,
+        ocp_admin_client=ocp_admin_client,
+        target_namespace=target_namespace,
+        max_populator_inflight=max_populator_inflight,
+        max_vm_inflight=max_vm_inflight,
+    )
+    wait_for_migration_complate(plan=plan, on_status_poll=tracker.poll)
+    return tracker.results, tracker.vm_results
 
 
 def execute_migration_monitoring_populator_inflight(
@@ -860,30 +1071,16 @@ def execute_migration_monitoring_populator_inflight(
         MigrationPlanExecError: If migration fails or times out.
         TimeoutError: If a copy-offload plan populator secret is not created in time.
     """
-    create_and_store_resource(
-        client=ocp_admin_client,
+    max_concurrent_by_host, _ = execute_migration_monitoring_inflight(
+        ocp_admin_client=ocp_admin_client,
         fixture_store=fixture_store,
-        resource=Migration,
-        namespace=target_namespace,
-        plan_name=plan.name,
-        plan_namespace=plan.namespace,
-        cut_over=cut_over,
-    )
-
-    wait_for_copyoffload_plan_secret(
-        ocp_admin_client=ocp_admin_client,
         plan=plan,
-        namespace=target_namespace,
-    )
-
-    tracker = _PopulatorConcurrencyTracker(
-        plan=plan,
-        ocp_admin_client=ocp_admin_client,
         target_namespace=target_namespace,
         max_populator_inflight=max_populator_inflight,
+        max_vm_inflight=None,
+        cut_over=cut_over,
     )
-    wait_for_migration_complate(plan=plan, on_status_poll=tracker.poll)
-    return tracker.results
+    return max_concurrent_by_host
 
 
 def _verify_source_host_labels_on_pods(populate_pods: list[Pod]) -> str:
@@ -1145,3 +1342,50 @@ def _verify_populator_inflight_observed(
                 f"(limit={max_populator_inflight}, disks={disk_count})"
             )
         LOGGER.info(f"Host '{source_host}': peak populator concurrency {peak_count}/{max_populator_inflight} (PASS)")
+
+
+def verify_vm_inflight_throttling(
+    max_active_migration_vms_by_host: dict[str, int],
+    max_vm_inflight: int,
+    expected_source_host: str | None = None,
+) -> None:
+    """Verify observed active migration VM concurrency respects the VM in-flight limit.
+
+    Args:
+        max_active_migration_vms_by_host (dict[str, int]): Peak active migration VMs per source host.
+        max_vm_inflight (int): Expected ForkliftController VM in-flight limit.
+        expected_source_host (str | None): Expected source host for single-host migrations.
+            When set, only that host is verified.
+
+    Raises:
+        ValueError: If no VM migration activity was observed, expected host data is missing,
+            or observed VM concurrency exceeds the limit.
+    """
+    if not max_active_migration_vms_by_host:
+        raise ValueError("No active migration VM monitoring data observed during migration execution")
+
+    unresolved_active_vms = max_active_migration_vms_by_host.get(_UNRESOLVED_VM_SOURCE_HOST, 0)
+    if unresolved_active_vms:
+        raise ValueError(
+            f"Found {unresolved_active_vms} active migration VM(s) without resolvable source host; "
+            "cannot verify VM in-flight throttling deterministically"
+        )
+
+    hosts_to_verify = {
+        host: count for host, count in max_active_migration_vms_by_host.items() if host != _UNRESOLVED_VM_SOURCE_HOST
+    }
+    if expected_source_host is not None:
+        if expected_source_host not in hosts_to_verify:
+            raise ValueError(
+                f"No VM in-flight monitoring data for sourceHost {expected_source_host!r}; "
+                f"observed hosts: {sorted(hosts_to_verify)}"
+            )
+        hosts_to_verify = {expected_source_host: hosts_to_verify[expected_source_host]}
+
+    for source_host, peak_active_vms in hosts_to_verify.items():
+        if peak_active_vms > max_vm_inflight:
+            raise ValueError(
+                f"Peak active migration VMs for host '{source_host}' was {peak_active_vms}, "
+                f"exceeding limit {max_vm_inflight}"
+            )
+        LOGGER.info(f"Host '{source_host}': peak active migration VMs {peak_active_vms}/{max_vm_inflight} (PASS)")

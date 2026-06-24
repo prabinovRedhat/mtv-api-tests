@@ -169,9 +169,7 @@ def vm_throttle_limits(
     finally:
         pending_exc = sys.exc_info()
         restored_expected_limit = (
-            original_deployment_populator_limit
-            if original_cr_populator_limit is None
-            else original_cr_populator_limit
+            original_deployment_populator_limit if original_cr_populator_limit is None else original_cr_populator_limit
         )
         LOGGER.info(
             f"Restoring ForkliftController controller_max_vm_inflight={original_vm_limit!r}, "

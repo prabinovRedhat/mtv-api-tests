@@ -33,13 +33,14 @@ from ocp_resources.subscription import Subscription
 from ocp_resources.virtual_machine import VirtualMachine
 from pytest_harvest import get_fixture_store
 from pytest_testconfig import config as py_config
-from timeout_sampler import TimeoutSampler
+from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
 from exceptions.exceptions import (
     ForkliftPodsNotRunningError,
     MissingProvidersFileError,
     MtvOperatorNotInstalledError,
     RemoteClusterAndLocalCluterNamesError,
+    VmNotFoundError,
 )
 from utilities.copyoffload_constants import FORKLIFT_CONTROLLER_NAME
 from libs.base_provider import BaseProvider
@@ -999,12 +1000,17 @@ def prepared_plan(
 
     Yields:
         dict[str, Any]: Prepared plan with updated VM names
+
+    Notes:
+        Cloned VMs are waited on for Forklift inventory sync using a fixed timeout
+        (300 seconds) to preserve deterministic fixture behavior.
     """
 
     # Deep copy the plan config to avoid mutation
     plan: dict[str, Any] = deepcopy(class_plan_config)
     virtual_machines: list[dict[str, Any]] = plan["virtual_machines"]
     warm_migration = plan.get("warm_migration", False)
+    inventory_vm_sync_timeout = 300
 
     # Initialize separate storage for source VM data (keeps virtual_machines clean for Plan CR serialization)
     plan["source_vms_data"] = {}
@@ -1128,7 +1134,28 @@ def prepared_plan(
             # This is needed for external providers that Forklift needs to sync from
             # OVA is excluded because it doesn't clone VMs (uses pre-existing files)
             if source_provider.type != Provider.ProviderType.OVA:
-                source_provider_inventory.wait_for_vm(name=vm["name"], timeout=300)
+                try:
+                    source_provider_inventory.wait_for_vm(name=vm["name"], timeout=inventory_vm_sync_timeout)
+                except TimeoutExpiredError as inventory_timeout_error:
+                    # Distinguish clone creation/naming failures from delayed Forklift inventory sync.
+                    if not isinstance(clone_provider, VMWareProvider):
+                        raise
+
+                    try:
+                        provider_vm = clone_provider.get_vm_by_name(query=vm["name"], clone_vm=False)
+                    except (ValueError, VmNotFoundError) as provider_lookup_error:
+                        raise TimeoutExpiredError(
+                            f"VM '{vm['name']}' did not appear in Forklift inventory after "
+                            f"{inventory_vm_sync_timeout}s and was not found on source provider. "
+                            "This suggests clone creation/naming failure before inventory sync."
+                        ) from provider_lookup_error
+
+                    provider_vm_id = getattr(provider_vm, "_moId", "unknown")
+                    raise TimeoutExpiredError(
+                        f"VM '{vm['name']}' exists on source provider (id={provider_vm_id}) but did not appear "
+                        f"in Forklift inventory after {inventory_vm_sync_timeout}s. "
+                        "This indicates delayed Forklift inventory sync."
+                    ) from inventory_timeout_error
 
             provider_vm_api = source_vm_details["provider_vm_api"]
 

@@ -18,12 +18,14 @@ SUPPORTED_VENDORS = (
     "flashsystem",
 )
 
-# MTV-696: per-ESXi-host populator throttling (ForkliftController controller_max_populator_inflight)
+# MTV-696 baseline: force visible populator throttling signals in the dedicated
+# populator-throttling test class.
 POPULATOR_INFLIGHT_LIMIT = 2
 
-# MTV-5654 Test 2: VM-level throttling (ForkliftController controller_max_vm_inflight)
+# MTV-777 baseline: VM scheduler throttling target in the VM-throttling class.
 VM_INFLIGHT_LIMIT = 1
-# Populator limit used alongside VM throttling — high enough to avoid disk-level throttling
+# MTV-777 companion value: keep populator limit higher while testing VM limit so
+# VM inflight is the primary bottleneck under test.
 VM_THROTTLE_POPULATOR_INFLIGHT = 3
 
 SOURCE_HOST_LABEL = "sourceHost"

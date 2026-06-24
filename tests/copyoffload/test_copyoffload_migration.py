@@ -3540,32 +3540,12 @@ class TestCopyoffloadLargeVmMigration:
         )
 
 
-@pytest.mark.vsphere
-@pytest.mark.copyoffload
-@pytest.mark.incremental
-@pytest.mark.parametrize(
-    "class_plan_config",
-    [pytest.param(py_config["tests_params"]["test_copyoffload_populator_throttling_migration"])],
-    indirect=True,
-    ids=["MTV-696:copyoffload-populator-throttling"],
-)
-@pytest.mark.usefixtures(
-    "vmware_cloud_init_ready",
-    "multus_network_name",
-    "copyoffload_config",
-    "populator_inflight_forkliftcontroller",
-    "copyoffload_ssh_key",
-    "cleanup_migrated_vms",
-)
-class TestCopyoffloadPopulatorThrottlingMigration:
-    """Copy-offload migration (MTV-696): per-ESXi-host populator throttling and sourceHost labels.
+class _CopyoffloadPopulatorThrottlingMigrationBase:
+    """Shared throttling flow for copy-offload test classes.
 
-    Covers MTV-5654 Test 1 + Test 3:
-    - Set controller_max_populator_inflight to a low value (2) on ForkliftController
-    - Migrate a VM with 4+ disks from a single ESXi host
-    - Verify peak populator concurrency per host respects the limit and reaches min(limit, disk_count)
-    - Verify PopulatorThrottled events on at least (disk_count - limit) PVCs and sourceHost labels on populate pods
-    - Restore controller_max_populator_inflight to its pre-test value after the class completes
+    This base class intentionally has no pytest class decorators. Concrete subclasses
+    provide the standard class-level ``class_plan_config`` parametrization and fixture
+    set, which prevents duplicate parametrization while keeping one common test flow.
     """
 
     storage_map: StorageMap
@@ -3749,6 +3729,35 @@ class TestCopyoffloadPopulatorThrottlingMigration:
 @pytest.mark.incremental
 @pytest.mark.parametrize(
     "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_populator_throttling_migration"])],
+    indirect=True,
+    ids=["MTV-696:copyoffload-populator-throttling"],
+)
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "populator_inflight_forkliftcontroller",
+    "copyoffload_ssh_key",
+    "cleanup_migrated_vms",
+)
+class TestCopyoffloadPopulatorThrottlingMigration(_CopyoffloadPopulatorThrottlingMigrationBase):
+    """Copy-offload migration (MTV-696): validate populator throttling behavior.
+
+    Parameter sources for this class:
+    - Plan data: ``tests/tests_config/config.py`` key
+      ``test_copyoffload_populator_throttling_migration`` via class-level
+      ``@pytest.mark.parametrize("class_plan_config", ...)``.
+    - ForkliftController limits: fixture ``populator_inflight_forkliftcontroller``
+      sets ``controller_max_populator_inflight`` to ``POPULATOR_INFLIGHT_LIMIT`` (2).
+    """
+
+
+@pytest.mark.vsphere
+@pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_vm_throttling_migration"])],
     indirect=True,
     ids=["MTV-777:copyoffload-vm-throttling"],
@@ -3760,16 +3769,24 @@ class TestCopyoffloadPopulatorThrottlingMigration:
     "copyoffload_ssh_key",
     "cleanup_migrated_vms",
 )
-class TestCopyoffloadVmThrottlingMigration(TestCopyoffloadPopulatorThrottlingMigration):
+class TestCopyoffloadVmThrottlingMigration(_CopyoffloadPopulatorThrottlingMigrationBase):
     """Copy-offload migration (MTV-777): VM-level scheduler throttling with populator concurrency.
 
     Covers MTV-777:
     - Set controller_max_vm_inflight to 1 on ForkliftController (1 VM per ESXi host at a time)
-    - Set controller_max_populator_inflight to 3 (populator throttling limit alongside vm throttling)
+    - Set controller_max_populator_inflight to 3 so VM inflight remains the primary bottleneck
     - Migrate 3 VMs, each with 4 additional disks, from a single ESXi host
     - Verify peak populator concurrency per host respects the populator limit (≤ 3)
     - Verify peak concurrent active VMs per host respects the VM in-flight limit (≤ 1)
     - Restore both limits to their pre-test values after the class completes
+
+    Parameter sources for this class:
+    - Plan data: ``tests/tests_config/config.py`` key
+      ``test_copyoffload_vm_throttling_migration`` via class-level
+      ``@pytest.mark.parametrize("class_plan_config", ...)``.
+    - ForkliftController limits: fixture ``vm_inflight_forkliftcontroller`` sets
+      ``controller_max_vm_inflight`` to ``VM_INFLIGHT_LIMIT`` (1) and
+      ``controller_max_populator_inflight`` to ``VM_THROTTLE_POPULATOR_INFLIGHT`` (3).
     """
 
     max_active_migration_vms_by_host: dict[str, int]
@@ -3786,6 +3803,10 @@ class TestCopyoffloadVmThrottlingMigration(TestCopyoffloadPopulatorThrottlingMig
             fixture_store (dict[str, Any]): Fixture store for created resources.
             ocp_admin_client (DynamicClient): OpenShift admin client.
             target_namespace (str): Namespace where migration resources are created.
+
+        Notes:
+            Uses VM-throttling constants from ``utilities/copyoffload_constants.py``:
+            ``VM_INFLIGHT_LIMIT`` (1) and ``VM_THROTTLE_POPULATOR_INFLIGHT`` (3).
         """
         (
             self.__class__.max_concurrent_by_host,

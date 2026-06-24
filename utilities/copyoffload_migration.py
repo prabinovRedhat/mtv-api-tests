@@ -539,6 +539,31 @@ def _populate_pod_info_from_pod(pod: Pod) -> dict[str, str]:
     }
 
 
+def _is_populate_container_ready_for_logs(pod: Pod) -> bool:
+    """Return whether the populate container is in a log-readable state."""
+    pod_status = _get_field_value(pod.instance, "status")
+    container_statuses = _get_field_value(pod_status, "containerStatuses") or []
+    for container_status in container_statuses:
+        if _get_field_value(container_status, "name") != "populate":
+            continue
+        container_state = _get_field_value(container_status, "state")
+        waiting_state = _get_field_value(container_state, "waiting")
+        if waiting_state:
+            waiting_reason = _get_field_value(waiting_state, "reason") or "waiting"
+            LOGGER.debug(
+                f"Skipping populate pod '{pod.name}' log capture while container is not ready (state={waiting_reason})"
+            )
+            return False
+
+        running_state = _get_field_value(container_state, "running")
+        terminated_state = _get_field_value(container_state, "terminated")
+        ready_flag = bool(_get_field_value(container_status, "ready"))
+        return bool(running_state or terminated_state or ready_flag)
+
+    LOGGER.debug(f"Skipping populate pod '{pod.name}' log capture: populate container status not available yet")
+    return False
+
+
 def _log_xcopy_verification_result(
     pod_name: str,
     pvc_name: str,
@@ -598,6 +623,8 @@ def _capture_populate_pod_logs(
     for pod in populate_pods:
         pod_info = _populate_pod_info_from_pod(pod=pod)
         cached_info_by_pod_name[pod.name] = pod_info
+        if not _is_populate_container_ready_for_logs(pod=pod):
+            continue
         try:
             log_content = pod.log()
         except DynamicApiError as err:
@@ -669,7 +696,11 @@ def _get_populate_pod_logs(
         migration_uid=migration_uid,
         require_pods=False,
     )
+    skipped_not_ready_count = 0
     for pod in populate_pods:
+        if not _is_populate_container_ready_for_logs(pod=pod):
+            skipped_not_ready_count += 1
+            continue
         try:
             log_content = pod.log()
         except DynamicApiError as err:
@@ -686,6 +717,12 @@ def _get_populate_pod_logs(
         }
 
     if not merged_by_pod_name:
+        if populate_pods and skipped_not_ready_count == len(populate_pods):
+            raise ValueError(
+                f"Populate pods were found for migration '{migration_uid}' in namespace "
+                f"'{target_namespace}', but all populate containers were still starting "
+                "(ContainerCreating/waiting) and had no readable logs yet"
+            )
         raise ValueError(f"No populate pods found for migration '{migration_uid}' in namespace '{target_namespace}'")
 
     merged_logs = list(merged_by_pod_name.values())

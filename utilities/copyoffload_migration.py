@@ -1346,6 +1346,33 @@ def _verify_source_host_labels_from_cache(pod_logs: list[PopulatePodLogData]) ->
     return source_hosts.pop()
 
 
+def _verify_source_host_labels_from_cache(pod_logs: list[PopulatePodLogData]) -> str:
+    """Verify sourceHost labels from cached populate pod data and return the shared host value.
+
+    Mirrors _verify_source_host_labels_on_pods() but uses cached PopulatePodLogData
+    instead of live Pod objects. Use when live pods are no longer available post-migration.
+
+    Args:
+        pod_logs (list[PopulatePodLogData]): Cached populate pod log data including source_host.
+
+    Returns:
+        str: The shared sourceHost label value.
+
+    Raises:
+        ValueError: If source_host is missing from any entry or hosts are inconsistent across pods.
+    """
+    source_hosts: set[str] = set()
+    for log_data in pod_logs:
+        source_host = log_data["source_host"]
+        if not source_host:
+            raise ValueError(f"Populate pod '{log_data['pod_name']}' is missing cached '{SOURCE_HOST_LABEL}' label")
+        source_hosts.add(source_host)
+        LOGGER.info(f"Populate pod '{log_data['pod_name']}' has {SOURCE_HOST_LABEL}={source_host!r} (from cache)")
+    if len(source_hosts) != 1:
+        raise ValueError(f"Expected a single ESXi sourceHost across populate pods, found: {sorted(source_hosts)}")
+    return source_hosts.pop()
+
+
 def _get_pvc_events(
     ocp_admin_client: DynamicClient,
     namespace: str,
@@ -1413,6 +1440,71 @@ def _verify_throttled_events_on_pod_logs(
 
     PVCs are queried live because they persist after populate pods are deleted.
     Uses cached PopulatePodLogData to avoid dependency on live Pod objects.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        target_namespace (str): Namespace where PVC events exist.
+        migration_uid (str): Migration UID for PVC label selector and error messages.
+        pod_logs (list[PopulatePodLogData]): Cached populate pod log data.
+        max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
+
+    Raises:
+        ValueError: If populate pod count does not exceed the limit, or too few PVCs have
+            PopulatorThrottled events.
+    """
+    pod_count = len(pod_logs)
+    min_expected_throttled = pod_count - max_populator_inflight
+    if min_expected_throttled <= 0:
+        raise ValueError(
+            f"Expected more populate pods ({pod_count}) than in-flight limit "
+            f"({max_populator_inflight}) to verify throttling for migration '{migration_uid}'"
+        )
+
+    pvc_names_from_pods: set[str] = {log_data["pvc_name"] for log_data in pod_logs}
+    pvc_names_from_label: set[str] = {
+        pvc.name
+        for pvc in PersistentVolumeClaim.get(
+            client=ocp_admin_client,
+            namespace=target_namespace,
+            label_selector=f"migration={migration_uid}",
+        )
+    }
+    pvc_names_to_check = pvc_names_from_pods | pvc_names_from_label
+    LOGGER.info(
+        f"Checking {len(pvc_names_to_check)} PVC(s) for throttled events "
+        f"(from pods: {pvc_names_from_pods}, from label: {pvc_names_from_label})"
+    )
+
+    throttled_pvc_names = _find_throttled_pvc_names(
+        ocp_admin_client=ocp_admin_client,
+        target_namespace=target_namespace,
+        pvc_names=pvc_names_to_check,
+    )
+
+    if len(throttled_pvc_names) < min_expected_throttled:
+        raise ValueError(
+            f"Expected at least {min_expected_throttled} PVC(s) with {POPULATOR_THROTTLED_EVENT_REASON} "
+            f"events for migration '{migration_uid}' ({pod_count} disks, "
+            f"limit={max_populator_inflight}); found {len(throttled_pvc_names)}: {throttled_pvc_names}"
+        )
+    LOGGER.info(
+        f"{len(throttled_pvc_names)}/{pod_count} PVC(s) reported {POPULATOR_THROTTLED_EVENT_REASON} "
+        f"(minimum expected: {min_expected_throttled})"
+    )
+
+
+def _verify_throttled_events_on_pod_logs(
+    ocp_admin_client: DynamicClient,
+    target_namespace: str,
+    migration_uid: str,
+    pod_logs: list[PopulatePodLogData],
+    max_populator_inflight: int,
+) -> None:
+    """Verify PopulatorThrottled events on PVCs using cached pod log data.
+
+    Mirrors _verify_throttled_events_on_pods() but uses cached PopulatePodLogData
+    instead of live Pod objects. PVCs are still queried live because they persist
+    after populate pods are deleted.
 
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client.

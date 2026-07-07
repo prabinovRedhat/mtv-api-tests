@@ -1104,9 +1104,16 @@ def prepared_plan(
 
         original_source_vm_names: list[str] = [vm["name"] for vm in virtual_machines] if has_shared_disk_config else []
         cloned_vm_objects: list[Any] = []
+        first_vm_esxi_host: str | None = None
 
         for vm in virtual_machines:
             clone_options = {**vm, "enable_ctk": warm_migration}
+
+            # Pin VM2+ to same ESXi host as VM1 when clone_to_same_host is set.
+            # Uses setdefault to respect any explicit per-VM target_esxi_host override.
+            if plan.get("clone_to_same_host", False) and first_vm_esxi_host:
+                clone_options.setdefault("target_esxi_host", first_vm_esxi_host)
+
             provider_vm_api = clone_provider.get_vm_by_name(
                 query=vm["name"],
                 vm_name_suffix=vm_name_suffix,
@@ -1114,6 +1121,13 @@ def prepared_plan(
                 session_uuid=fixture_store["session_uuid"],
                 clone_options=clone_options,
             )
+
+            # Capture first VM's actual ESXi host name for subsequent clones.
+            if plan.get("clone_to_same_host", False) and first_vm_esxi_host is None:
+                runtime_host = getattr(getattr(provider_vm_api, "runtime", None), "host", None)
+                if runtime_host and hasattr(runtime_host, "name"):
+                    first_vm_esxi_host = runtime_host.name
+                    LOGGER.info(f"Same-host cloning: pinning subsequent VMs to ESXi host '{first_vm_esxi_host}'")
             if has_shared_disk_config:
                 cloned_vm_objects.append(provider_vm_api)
 

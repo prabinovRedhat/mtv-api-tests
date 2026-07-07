@@ -5392,10 +5392,13 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
     """Copy-offload migration (MTV-6053): combined VM and populator inflight throttling.
 
     Covers MTV-777:
-    - Set controller_max_vm_inflight to 1 and controller_max_populator_inflight to 2
+    - Set controller_max_vm_inflight to VM_INFLIGHT_LIMIT (1) and
+      controller_max_populator_inflight to VM_POPULATOR_INFLIGHT_LIMIT (3)
     - Migrate 2 VMs with 3+ disks each from the same ESXi host
     - Verify peak concurrent VMs per host respects controller_max_vm_inflight (VM throttling)
-    - Verify peak populator concurrency and PopulatorThrottled events (populator throttling)
+    - Verify peak populator concurrency per ESXi host (populator throttling).
+      PopulatorThrottled event coverage is provided by
+      TestCopyoffloadPopulatorThrottlingMigration (MTV-696).
     - Restore both limits after the class completes
     """
 

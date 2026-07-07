@@ -5373,7 +5373,7 @@ class TestConcurrentXcopyVddkMigration:
     "class_plan_config",
     [pytest.param(py_config["tests_params"]["test_copyoffload_vm_populator_throttling_migration"])],
     indirect=True,
-    ids=["MTV-6053:copyoffload-vm-populator-throttling"],
+    ids=["MTV-777:copyoffload-vm-populator-throttling"],
 )
 @pytest.mark.usefixtures(
     "vmware_cloud_init_ready",

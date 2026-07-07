@@ -16,6 +16,8 @@ from ocp_resources.resource import ResourceEditor
 from simple_logger.logger import get_logger
 from timeout_sampler import TimeoutExpiredError, TimeoutSampler
 
+from utilities.copyoffload_constants import FORKLIFT_CONTROLLER_NAME
+
 if TYPE_CHECKING:
     from kubernetes.dynamic import DynamicClient
 
@@ -354,7 +356,6 @@ def populator_inflight_limit(
 # Mirrors the populator helpers above for the forklift-controller deployment.
 # ──────────────────────────────────────────────────────────────────────────────
 
-FORKLIFT_CONTROLLER_DEPLOYMENT = "forklift-controller"
 MAX_VM_INFLIGHT_ENV = "MAX_VM_INFLIGHT"
 
 
@@ -393,21 +394,20 @@ def get_deployment_vm_inflight_limit(
     """
     deployment = Deployment(
         client=ocp_admin_client,
-        name=FORKLIFT_CONTROLLER_DEPLOYMENT,
+        name=FORKLIFT_CONTROLLER_NAME,
         namespace=mtv_namespace,
         ensure_exists=True,
     )
     limit_str = get_vm_inflight_from_deployment(deployment=deployment)
     if limit_str is None:
         raise ValueError(
-            f"{MAX_VM_INFLIGHT_ENV} not found on {FORKLIFT_CONTROLLER_DEPLOYMENT} "
-            f"before VM inflight throttling test setup"
+            f"{MAX_VM_INFLIGHT_ENV} not found on {FORKLIFT_CONTROLLER_NAME} before VM inflight throttling test setup"
         )
     try:
         return int(limit_str)
     except (ValueError, TypeError) as err:
         raise ValueError(
-            f"{MAX_VM_INFLIGHT_ENV} on {FORKLIFT_CONTROLLER_DEPLOYMENT} has non-integer value {limit_str!r}"
+            f"{MAX_VM_INFLIGHT_ENV} on {FORKLIFT_CONTROLLER_NAME} has non-integer value {limit_str!r}"
         ) from err
 
 
@@ -434,7 +434,7 @@ def wait_for_vm_inflight_deployment(
     def _deployment_ready_with_limit() -> bool:
         current_deployment = Deployment(
             client=ocp_admin_client,
-            name=FORKLIFT_CONTROLLER_DEPLOYMENT,
+            name=FORKLIFT_CONTROLLER_NAME,
             namespace=mtv_namespace,
             ensure_exists=True,
         )
@@ -461,13 +461,13 @@ def wait_for_vm_inflight_deployment(
     except TimeoutExpiredError as err:
         final_deployment = Deployment(
             client=ocp_admin_client,
-            name=FORKLIFT_CONTROLLER_DEPLOYMENT,
+            name=FORKLIFT_CONTROLLER_NAME,
             namespace=mtv_namespace,
             ensure_exists=True,
         )
         current_limit = get_vm_inflight_from_deployment(deployment=final_deployment)
         raise TimeoutError(
-            f"Timed out waiting for {FORKLIFT_CONTROLLER_DEPLOYMENT} to apply "
+            f"Timed out waiting for {FORKLIFT_CONTROLLER_NAME} to apply "
             f"{MAX_VM_INFLIGHT_ENV}={expected_value} (current={current_limit!r})"
         ) from err
 
@@ -521,17 +521,6 @@ def _ensure_forklift_controller_vm_limit(
     )
 
 
-def get_forkliftcontroller_vm_inflight_lock_path() -> Path:
-    """Return the cross-worker lock path for ForkliftController VM inflight limit changes.
-
-    Returns:
-        Path: File lock path under a secured shared temp directory.
-    """
-    lock_dir = Path(tempfile.gettempdir()) / "pytest-shared-forklift"
-    ensure_secure_shared_lock_dir(lock_dir=lock_dir)
-    return lock_dir / "vm-inflight.lock"
-
-
 def get_forkliftcontroller_vm_populator_inflight_lock_path() -> Path:
     """Return the cross-worker lock path for fixtures patching both VM and populator inflight limits.
 
@@ -567,6 +556,11 @@ def vm_inflight_limit(
         mtv_namespace (str): Namespace where the forklift controller runs.
         test_limit (int): Limit to apply for the test (e.g. VM_INFLIGHT_LIMIT).
         original_deployment_limit (int): MAX_VM_INFLIGHT value before the test.
+
+    Raises:
+        TimeoutError: If the forklift-controller deployment does not reach the expected
+            limit within FORKLIFT_CONTROLLER_CONDITION_TIMEOUT seconds.
+        ValueError: If controller_max_vm_inflight has a non-integer value on the CR.
     """
     cr_limit_int = _get_cr_vm_limit(forklift_controller=forklift_controller)
 

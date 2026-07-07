@@ -5536,18 +5536,23 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
     def test_verify_vm_populator_throttling(
         self,
         prepared_plan: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+        fixture_store: dict[str, Any],
     ) -> None:
         """Verify VM inflight throttling was enforced.
 
-        Confirms peak concurrent VMs per ESXi host respected VM_INFLIGHT_LIMIT (1)
-        and that the limit was exercised (at least one VM had to wait). PopulatorThrottled
-        event verification is intentionally omitted: with vm_inflight=1, VMs migrate
-        sequentially, so the per-batch event count differs from the global pod count
-        that verify_populator_throttling() assumes. Populator event coverage is provided
-        by TestCopyoffloadPopulatorThrottlingMigration (MTV-696).
+        PopulatorThrottled event verification is omitted: with VM_INFLIGHT_LIMIT=1,
+        VMs migrate sequentially and the expected event count is per-VM-batch
+        (disks_per_vm - limit), not total_pods - limit. Populator event coverage
+        is provided by TestCopyoffloadPopulatorThrottlingMigration (MTV-696).
+        Populator sourceHost labels and concurrency are validated via test_check_xcopy_used.
 
         Args:
-            prepared_plan (dict[str, Any]): Prepared plan configuration (provides VM count).
+            prepared_plan (dict[str, Any]): Prepared plan configuration (for VM count).
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where populate pods and PVCs exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         vm_count = len(prepared_plan["virtual_machines"])
         verify_vm_inflight_throttling(

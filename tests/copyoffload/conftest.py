@@ -18,6 +18,7 @@ from utilities.copyoffload_constants import (
     POPULATOR_INFLIGHT_LIMIT,
     SUPPORTED_VENDORS,
     VM_INFLIGHT_LIMIT,
+    VM_POPULATOR_INFLIGHT_LIMIT,
 )
 from utilities.copyoffload_migration import (
     get_copyoffload_credential,
@@ -290,7 +291,7 @@ def vm_populator_inflight_forkliftcontroller(
                     forklift_controller=forklift_controller,
                     ocp_admin_client=ocp_admin_client,
                     mtv_namespace=mtv_namespace,
-                    test_limit=POPULATOR_INFLIGHT_LIMIT,
+                    test_limit=VM_POPULATOR_INFLIGHT_LIMIT,
                     original_deployment_limit=original_populator_limit,
                 ):
                     yield

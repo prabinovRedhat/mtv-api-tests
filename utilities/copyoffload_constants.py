@@ -23,6 +23,9 @@ POPULATOR_INFLIGHT_LIMIT = 2
 
 # MTV-6053: per-ESXi-host VM inflight throttling (ForkliftController controller_max_vm_inflight)
 VM_INFLIGHT_LIMIT = 1
+# MTV-6053: per-ESXi-host populator throttling for the combined VM+populator test.
+# Intentionally distinct from POPULATOR_INFLIGHT_LIMIT (2) used by MTV-696.
+VM_POPULATOR_INFLIGHT_LIMIT = 3
 
 SOURCE_HOST_LABEL = "sourceHost"
 POPULATOR_THROTTLED_EVENT_REASON = "PopulatorThrottled"

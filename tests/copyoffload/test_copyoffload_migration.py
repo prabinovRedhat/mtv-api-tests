@@ -32,7 +32,7 @@ from exceptions.exceptions import MigrationPlanExecError
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from utilities.copyoffload_constants import POPULATOR_INFLIGHT_LIMIT, VM_INFLIGHT_LIMIT
+from utilities.copyoffload_constants import POPULATOR_INFLIGHT_LIMIT, VM_INFLIGHT_LIMIT, VM_POPULATOR_INFLIGHT_LIMIT
 from utilities.copyoffload_migration import (
     create_log_capture_callback,
     execute_copyoffload_migration,
@@ -5528,7 +5528,7 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
             source_provider_inventory=source_provider_inventory,
             vm_names=vm_names,
             max_vm_inflight=VM_INFLIGHT_LIMIT,
-            max_populator_inflight=POPULATOR_INFLIGHT_LIMIT,
+            max_populator_inflight=VM_POPULATOR_INFLIGHT_LIMIT,
         )
         self.__class__.max_concurrent_vms_by_host = vm_results
         self.__class__.max_concurrent_by_host = populator_results
@@ -5563,7 +5563,7 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
             target_namespace=target_namespace,
             max_concurrent_by_host=self.max_concurrent_by_host,
             fixture_store=fixture_store,
-            max_populator_inflight=POPULATOR_INFLIGHT_LIMIT,
+            max_populator_inflight=VM_POPULATOR_INFLIGHT_LIMIT,
             verify_events=False,
         )
 

@@ -382,6 +382,7 @@ tests_params: dict = {
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                 ],
             },
             {
@@ -393,12 +394,25 @@ tests_params: dict = {
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+                ],
+            },
+            {
+                "name": "xcopy-template-test",
+                "guest_agent": True,
+                "clone": True,
+                "disk_type": "thin",
+                "add_disks": [
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                 ],
             },
         ],
         "warm_migration": False,
         "copyoffload": True,
-        "clone_to_same_host": True,  # Forces VM2+ to the same ESXi host as VM1 for per-host inflight throttling
+        "clone_to_same_host": True,
     },
     "test_copyoffload_large_vm_migration": {
         "virtual_machines": [

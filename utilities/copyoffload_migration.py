@@ -1739,10 +1739,9 @@ def execute_migration_monitoring_vm_and_populator_inflight(
     unique_hosts = set(vm_host_map.values())
     if len(unique_hosts) > 1:
         raise ValueError(
-            f"All VMs must be on the same ESXi host for VM inflight throttling to be exercised. "
-            f"Found VMs on different hosts: {vm_host_map}. "
-            f"Set copyoffload.esxi_host in providers.json to the vCenter-registered ESXi hostname "
-            f"to force clone placement onto a single host."
+            f"VM inflight throttling test requires all VMs on the same ESXi host. "
+            f"Got: {vm_host_map}. "
+            f"Ensure 'copyoffload.esxi_host' in providers.json points to the correct ESXi host."
         )
 
     _start_copyoffload_migration(

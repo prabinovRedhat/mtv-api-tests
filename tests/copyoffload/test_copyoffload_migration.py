@@ -5389,7 +5389,7 @@ class TestConcurrentXcopyVddkMigration:
     "cleanup_migrated_vms",
 )
 class TestCopyoffloadVmPopulatorThrottlingMigration:
-    """Copy-offload migration (MTV-6053): combined VM and populator inflight throttling.
+    """Copy-offload migration (MTV-777): combined VM and populator inflight throttling.
 
     Covers MTV-777:
     - Set controller_max_vm_inflight to VM_INFLIGHT_LIMIT (1) and controller_max_populator_inflight to VM_POPULATOR_INFLIGHT_LIMIT (3)
@@ -5398,9 +5398,10 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
     - Verify XCOPY was used and populator peak concurrency respected VM_POPULATOR_INFLIGHT_LIMIT
     - Restore both limits after the class completes
 
-    Note: Requires both VMs to clone to the same ESXi host.
-    Set 'copyoffload.esxi_host' in providers.json to the target ESXi host FQDN/IP
-    that maps to the same vCenter-registered host for both clones.
+    Note:
+        Requires both VMs to clone to the same ESXi host. Set 'copyoffload.esxi_host'
+        in providers.json to the target ESXi host FQDN/IP that maps to the same
+        vCenter-registered host for both clones.
     """
 
     storage_map: StorageMap

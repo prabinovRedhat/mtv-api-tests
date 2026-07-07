@@ -370,6 +370,34 @@ tests_params: dict = {
         "warm_migration": False,
         "copyoffload": True,
     },
+    "test_copyoffload_vm_populator_throttling_migration": {
+        "virtual_machines": [
+            {
+                "name": "xcopy-template-test",
+                "guest_agent": True,
+                "clone": True,
+                "disk_type": "thin",
+                "add_disks": [
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+                ],
+            },
+            {
+                "name": "xcopy-template-test",
+                "guest_agent": True,
+                "clone": True,
+                "disk_type": "thin",
+                "add_disks": [
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
+                ],
+            },
+        ],
+        "warm_migration": False,
+        "copyoffload": True,
+    },
     "test_copyoffload_large_vm_migration": {
         "virtual_machines": [
             {

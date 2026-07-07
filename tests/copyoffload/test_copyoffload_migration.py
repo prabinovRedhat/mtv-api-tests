@@ -5420,7 +5420,19 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
         source_provider_data: dict[str, Any],
         copyoffload_storage_secret: Secret,
     ) -> None:
-        """Create StorageMap with copy-offload configuration."""
+        """Create StorageMap with copy-offload configuration.
+
+        Args:
+            prepared_plan (dict[str, Any]): Prepared plan configuration with VM names.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (OCPProvider): Destination provider instance.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            target_namespace (str): Target namespace for the StorageMap.
+            source_provider_data (dict[str, Any]): Source provider configuration data.
+            copyoffload_storage_secret (Secret): Copy-offload storage credentials secret.
+        """
         copyoffload_config_data = source_provider_data["copyoffload"]
         storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
         datastore_id = copyoffload_config_data["datastore_id"]
@@ -5461,7 +5473,18 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
         target_namespace: str,
         multus_network_name: dict[str, str],
     ) -> None:
-        """Create NetworkMap resource."""
+        """Create NetworkMap resource.
+
+        Args:
+            prepared_plan (dict[str, Any]): Prepared plan configuration with VM names.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (OCPProvider): Destination provider instance.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            target_namespace (str): Target namespace for the NetworkMap.
+            multus_network_name (dict[str, str]): Multus network name mapping.
+        """
         vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
         self.__class__.network_map = get_network_migration_map(
             fixture_store=fixture_store,
@@ -5485,7 +5508,17 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
         target_namespace: str,
         source_provider_inventory: ForkliftInventory,
     ) -> None:
-        """Create MTV Plan CR resource."""
+        """Create MTV Plan CR resource.
+
+        Args:
+            prepared_plan (dict[str, Any]): Prepared plan configuration with VM names.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (OCPProvider): Destination provider instance.
+            target_namespace (str): Target namespace for the Plan.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+        """
         for vm in prepared_plan["virtual_machines"]:
             vm_name = vm["name"]
             vm_data = source_provider_inventory.get_vm(vm_name)
@@ -5539,9 +5572,6 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
     def test_verify_vm_populator_throttling(
         self,
         prepared_plan: dict[str, Any],
-        ocp_admin_client: DynamicClient,
-        target_namespace: str,
-        fixture_store: dict[str, Any],
     ) -> None:
         """Verify VM inflight throttling was enforced.
 
@@ -5552,9 +5582,6 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
 
         Args:
             prepared_plan (dict[str, Any]): Prepared plan configuration (for VM count).
-            ocp_admin_client (DynamicClient): OpenShift admin client.
-            target_namespace (str): Namespace where populate pods and PVCs exist.
-            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         """
         vm_count = len(prepared_plan["virtual_machines"])
         verify_vm_inflight_throttling(
@@ -5595,7 +5622,18 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
         source_provider_inventory: ForkliftInventory,
         vm_ssh_connections: SSHConnectionManager | None,
     ) -> None:
-        """Validate migrated VMs."""
+        """Validate migrated VMs.
+
+        Args:
+            prepared_plan (dict[str, Any]): Prepared plan configuration.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (OCPProvider): Destination provider instance.
+            source_provider_data (dict[str, Any]): Source provider configuration data.
+            target_namespace (str): Target namespace where migrated VMs exist.
+            source_vms_namespace (str): Namespace of the source VMs.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            vm_ssh_connections (SSHConnectionManager | None): SSH connection manager.
+        """
         check_vms(
             plan=prepared_plan,
             source_provider=source_provider,

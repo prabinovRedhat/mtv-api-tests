@@ -1125,9 +1125,13 @@ def prepared_plan(
             # Capture first VM's actual ESXi host name for subsequent clones.
             if plan.get("clone_to_same_host", False) and first_vm_esxi_host is None:
                 runtime_host = getattr(getattr(provider_vm_api, "runtime", None), "host", None)
-                if runtime_host and hasattr(runtime_host, "name"):
-                    first_vm_esxi_host = runtime_host.name
-                    LOGGER.info(f"Same-host cloning: pinning subsequent VMs to ESXi host '{first_vm_esxi_host}'")
+                if not runtime_host or not getattr(runtime_host, "name", None):
+                    raise ValueError(
+                        f"clone_to_same_host=True but could not determine ESXi host "
+                        f"for VM '{vm['name']}'. Cannot pin subsequent clones."
+                    )
+                first_vm_esxi_host = runtime_host.name
+                LOGGER.info(f"Same-host cloning: pinning subsequent VMs to ESXi host '{first_vm_esxi_host}'")
             if has_shared_disk_config:
                 cloned_vm_objects.append(provider_vm_api)
 

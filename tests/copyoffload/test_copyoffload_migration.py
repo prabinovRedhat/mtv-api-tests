@@ -5493,7 +5493,7 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
             virtual_machines_list=prepared_plan["virtual_machines"],
             target_namespace=target_namespace,
             warm_migration=prepared_plan.get("warm_migration", False),
-            copyoffload=prepared_plan["copyoffload"],
+            copyoffload=prepared_plan.get("copyoffload", False),
         )
         assert self.plan_resource, "Plan creation failed"
 

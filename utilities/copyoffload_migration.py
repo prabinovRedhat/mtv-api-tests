@@ -1755,8 +1755,8 @@ def execute_migration_monitoring_vm_and_populator_inflight(
     Raises:
         MigrationPlanExecError: If migration fails or times out.
         TimeoutError: If a copy-offload plan populator secret is not created in time.
-        ValueError: If any VM is missing a 'host' field in the inventory response, or
-            if VMs are on different ESXi hosts (throttling would not be exercised).
+        ValueError: If any VM is missing a 'host' field in the inventory response.
+        ValueError: If VMs are on different ESXi hosts (throttling would not be exercised).
     """
     vm_host_map = _build_vm_host_map(
         vm_names=vm_names,

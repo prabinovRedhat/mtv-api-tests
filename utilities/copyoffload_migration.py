@@ -1475,7 +1475,6 @@ def verify_populator_throttling(
     max_concurrent_by_host: dict[str, int],
     fixture_store: dict[str, Any],
     max_populator_inflight: int = POPULATOR_INFLIGHT_LIMIT,
-    verify_events: bool = True,
 ) -> str:
     """Verify MTV-696 populator throttling: labels, events, and peak concurrency.
 
@@ -1491,9 +1490,6 @@ def verify_populator_throttling(
             observed during migration.
         fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
         max_populator_inflight (int): Expected ForkliftController populator in-flight limit.
-        verify_events (bool): When True (default), verify PopulatorThrottled events on PVCs.
-            Set to False when VMs migrate sequentially (e.g., VM inflight limit = 1), because
-            the expected event count is per-VM-batch rather than total pods minus the limit.
 
     Returns:
         str: The shared sourceHost label value from all populate pods.
@@ -1509,14 +1505,13 @@ def verify_populator_throttling(
         fixture_store=fixture_store,
     )
     source_host = _verify_source_host_labels_from_cache(pod_logs=pod_logs)
-    if verify_events:
-        _verify_throttled_events_on_pod_logs(
-            ocp_admin_client=ocp_admin_client,
-            target_namespace=target_namespace,
-            migration_uid=migration_uid,
-            pod_logs=pod_logs,
-            max_populator_inflight=max_populator_inflight,
-        )
+    _verify_throttled_events_on_pod_logs(
+        ocp_admin_client=ocp_admin_client,
+        target_namespace=target_namespace,
+        migration_uid=migration_uid,
+        pod_logs=pod_logs,
+        max_populator_inflight=max_populator_inflight,
+    )
     if source_host not in max_concurrent_by_host:
         raise ValueError(
             f"No populator monitoring data for sourceHost {source_host!r}; "

@@ -236,7 +236,7 @@ def vm_populator_inflight_forkliftcontroller(
     """Set both ForkliftController VM and populator in-flight limits for the test class.
 
     Patches controller_max_vm_inflight to VM_INFLIGHT_LIMIT (1) and
-    controller_max_populator_inflight to POPULATOR_INFLIGHT_LIMIT (2) for the
+    controller_max_populator_inflight to VM_POPULATOR_INFLIGHT_LIMIT (3) for the
     class, then restores both limits on teardown. A single combined file lock
     serializes all ForkliftController changes across pytest-xdist workers for
     the entire class duration to prevent partial-patch races.

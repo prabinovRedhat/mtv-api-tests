@@ -32,12 +32,14 @@ from exceptions.exceptions import MigrationPlanExecError
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from utilities.copyoffload_constants import POPULATOR_INFLIGHT_LIMIT
+from utilities.copyoffload_constants import POPULATOR_INFLIGHT_LIMIT, VM_INFLIGHT_LIMIT
 from utilities.copyoffload_migration import (
     create_log_capture_callback,
     execute_copyoffload_migration,
     execute_migration_monitoring_populator_inflight,
+    execute_migration_monitoring_vm_and_populator_inflight,
     verify_populator_throttling,
+    verify_vm_inflight_throttling,
     verify_xcopy_used,
     verify_xcopy_used_per_datastore,
 )
@@ -5361,4 +5363,246 @@ class TestConcurrentXcopyVddkMigration:
         )
         verify_vm_disk_count(
             destination_provider=destination_provider, plan=prepared_plan_2, target_namespace=target_namespace
+        )
+
+
+@pytest.mark.vsphere
+@pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_vm_populator_throttling_migration"])],
+    indirect=True,
+    ids=["MTV-6053:copyoffload-vm-populator-throttling"],
+)
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "vm_populator_inflight_forkliftcontroller",
+    "copyoffload_ssh_key",
+    "cleanup_migrated_vms",
+)
+class TestCopyoffloadVmPopulatorThrottlingMigration:
+    """Copy-offload migration (MTV-6053): combined VM and populator inflight throttling.
+
+    Covers MTV-777:
+    - Set controller_max_vm_inflight to 1 and controller_max_populator_inflight to 2
+    - Migrate 2 VMs with 3+ disks each from the same ESXi host
+    - Verify peak concurrent VMs per host respects controller_max_vm_inflight (VM throttling)
+    - Verify peak populator concurrency and PopulatorThrottled events (populator throttling)
+    - Restore both limits after the class completes
+    """
+
+    storage_map: StorageMap
+    network_map: NetworkMap
+    plan_resource: Plan
+    max_concurrent_vms_by_host: dict[str, int]
+    max_concurrent_by_host: dict[str, int]
+
+    def test_create_storagemap(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        source_provider_data: dict[str, Any],
+        copyoffload_storage_secret: Secret,
+    ) -> None:
+        """Create StorageMap with copy-offload configuration."""
+        copyoffload_config_data = source_provider_data["copyoffload"]
+        storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+        datastore_id = copyoffload_config_data["datastore_id"]
+        storage_class = py_config["storage_class"]
+
+        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+
+        offload_plugin_config = {
+            "vsphereXcopyConfig": {
+                "secretRef": copyoffload_storage_secret.name,
+                "storageVendorProduct": storage_vendor_product,
+            }
+        }
+
+        self.__class__.storage_map = get_storage_migration_map(
+            fixture_store=fixture_store,
+            target_namespace=target_namespace,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            ocp_admin_client=ocp_admin_client,
+            source_provider_inventory=source_provider_inventory,
+            vms=vms_names,
+            storage_class=storage_class,
+            datastore_id=datastore_id,
+            offload_plugin_config=offload_plugin_config,
+            volume_mode="Block",
+        )
+        assert self.storage_map, "StorageMap creation failed"
+
+    def test_create_networkmap(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        multus_network_name: dict[str, str],
+    ) -> None:
+        """Create NetworkMap resource."""
+        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+        self.__class__.network_map = get_network_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            multus_network_name=multus_network_name,
+            target_namespace=target_namespace,
+            vms=vms_names,
+        )
+        assert self.network_map, "NetworkMap creation failed"
+
+    def test_create_plan(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        target_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+    ) -> None:
+        """Create MTV Plan CR resource."""
+        for vm in prepared_plan["virtual_machines"]:
+            vm_name = vm["name"]
+            vm_data = source_provider_inventory.get_vm(vm_name)
+            vm["id"] = vm_data["id"]
+
+        self.__class__.plan_resource = create_plan_resource(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            storage_map=self.storage_map,
+            network_map=self.network_map,
+            virtual_machines_list=prepared_plan["virtual_machines"],
+            target_namespace=target_namespace,
+            warm_migration=prepared_plan.get("warm_migration", False),
+            copyoffload=prepared_plan["copyoffload"],
+        )
+        assert self.plan_resource, "Plan creation failed"
+
+    def test_migrate_vms(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+    ) -> None:
+        """Execute migration while monitoring VM and populator concurrency per ESXi host.
+
+        Args:
+            prepared_plan (dict[str, Any]): Prepared plan configuration with VM names.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking and log caching.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where the Migration CR is created.
+            source_provider_inventory (ForkliftInventory): Inventory API for ESXi host lookup.
+        """
+        vm_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+        vm_results, populator_results = execute_migration_monitoring_vm_and_populator_inflight(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            source_provider_inventory=source_provider_inventory,
+            vm_names=vm_names,
+            max_vm_inflight=VM_INFLIGHT_LIMIT,
+            max_populator_inflight=POPULATOR_INFLIGHT_LIMIT,
+        )
+        self.__class__.max_concurrent_vms_by_host = vm_results
+        self.__class__.max_concurrent_by_host = populator_results
+
+    def test_verify_vm_populator_throttling(
+        self,
+        prepared_plan: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+        fixture_store: dict[str, Any],
+    ) -> None:
+        """Verify VM inflight throttling and populator throttling were both enforced.
+
+        Args:
+            prepared_plan (dict[str, Any]): Prepared plan configuration (for VM count).
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where populate pods and PVCs exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
+        """
+        vm_count = len(prepared_plan["virtual_machines"])
+        verify_vm_inflight_throttling(
+            max_concurrent_by_host=self.max_concurrent_vms_by_host,
+            vm_count=vm_count,
+            max_vm_inflight=VM_INFLIGHT_LIMIT,
+        )
+        # verify_events=False: VMs migrate sequentially (VM_INFLIGHT_LIMIT=1), so the
+        # expected PopulatorThrottled event count is per-VM-batch (disks_per_vm - limit),
+        # not total_pods - limit. Peak concurrency is verified via monitoring data instead.
+        verify_populator_throttling(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            max_concurrent_by_host=self.max_concurrent_by_host,
+            fixture_store=fixture_store,
+            max_populator_inflight=POPULATOR_INFLIGHT_LIMIT,
+            verify_events=False,
+        )
+
+    def test_check_xcopy_used(
+        self,
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+        fixture_store: dict[str, Any],
+    ) -> None:
+        """Verify XCOPY acceleration was used for all disks.
+
+        Args:
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
+        """
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
+            fixture_store=fixture_store,
+        )
+
+    def test_check_vms(
+        self,
+        prepared_plan: dict[str, Any],
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_data: dict[str, Any],
+        target_namespace: str,
+        source_vms_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+        vm_ssh_connections: SSHConnectionManager | None,
+    ) -> None:
+        """Validate migrated VMs."""
+        check_vms(
+            plan=prepared_plan,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            network_map_resource=self.network_map,
+            storage_map_resource=self.storage_map,
+            source_provider_data=source_provider_data,
+            source_vms_namespace=source_vms_namespace,
+            source_provider_inventory=source_provider_inventory,
+            vm_ssh_connections=vm_ssh_connections,
         )

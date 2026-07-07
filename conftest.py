@@ -1163,9 +1163,7 @@ def prepared_plan(
             # This is needed for external providers that Forklift needs to sync from
             # OVA is excluded because it doesn't clone VMs (uses pre-existing files)
             if source_provider.type != Provider.ProviderType.OVA:
-                source_provider_inventory.wait_for_vm(
-                    name=vm["name"], timeout=class_plan_config.get("inventory_timeout", 300)
-                )
+                source_provider_inventory.wait_for_vm(name=vm["name"], timeout=plan.get("inventory_timeout", 300))
 
             provider_vm_api = source_vm_details["provider_vm_api"]
 

@@ -1731,6 +1731,12 @@ def execute_migration_monitoring_vm_and_populator_inflight(
     - Populator concurrency tracker: counts active populate pods per ESXi host
     - Log capture: caches populate pod logs for post-migration xcopy verification
 
+    Requires all VMs to be on the same ESXi host so that the per-host VM inflight
+    limit is exercised. If VMs land on different hosts, the Forklift scheduler allows
+    one VM per host simultaneously and throttling is never a constraint. Ensure
+    ``copyoffload.esxi_host`` is set in providers.json to the vCenter-registered
+    ESXi hostname so that clone placement targets the correct host.
+
     Args:
         ocp_admin_client (DynamicClient): OpenShift admin client for API interactions.
         fixture_store (dict[str, Any]): Fixture store for resource tracking and log caching.
@@ -1749,12 +1755,21 @@ def execute_migration_monitoring_vm_and_populator_inflight(
     Raises:
         MigrationPlanExecError: If migration fails or times out.
         TimeoutError: If a copy-offload plan populator secret is not created in time.
-        ValueError: If any VM is missing a 'host' field in the inventory response.
+        ValueError: If any VM is missing a 'host' field in the inventory response, or
+            if VMs are on different ESXi hosts (throttling would not be exercised).
     """
     vm_host_map = _build_vm_host_map(
         vm_names=vm_names,
         source_provider_inventory=source_provider_inventory,
     )
+    unique_hosts = set(vm_host_map.values())
+    if len(unique_hosts) > 1:
+        raise ValueError(
+            f"All VMs must be on the same ESXi host for VM inflight throttling to be exercised. "
+            f"Found VMs on different hosts: {vm_host_map}. "
+            f"Set copyoffload.esxi_host in providers.json to the vCenter-registered ESXi hostname "
+            f"to force clone placement onto a single host."
+        )
 
     _start_copyoffload_migration(
         ocp_admin_client=ocp_admin_client,

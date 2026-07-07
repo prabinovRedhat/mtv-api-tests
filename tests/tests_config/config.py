@@ -413,7 +413,7 @@ tests_params: dict = {
         "warm_migration": False,
         "copyoffload": True,
         "clone_to_same_host": True,
-        "inventory_timeout": 600,  # 3 VMs x 5 disks need longer inventory sync time
+        "inventory_timeout": 600,  # 10 min — same-host cloning slows inventory sync
     },
     "test_copyoffload_large_vm_migration": {
         "virtual_machines": [

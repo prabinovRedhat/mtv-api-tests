@@ -381,7 +381,6 @@ tests_params: dict = {
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
-                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                 ],
             },
             {
@@ -393,7 +392,6 @@ tests_params: dict = {
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
-                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                 ],
             },
             {
@@ -402,7 +400,6 @@ tests_params: dict = {
                 "clone": True,
                 "disk_type": "thin",
                 "add_disks": [
-                    {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
                     {"size_gb": 10, "disk_mode": "persistent", "provision_type": "thin"},
@@ -411,7 +408,7 @@ tests_params: dict = {
         ],
         "warm_migration": False,
         "copyoffload": True,
-        "inventory_timeout": 600,  # 10 min — 3 VMs x 5 disks need longer inventory sync
+        "inventory_timeout": 600,  # 10 min — 3 VMs x 4 disks need longer inventory sync
     },
     "test_copyoffload_large_vm_migration": {
         "virtual_machines": [

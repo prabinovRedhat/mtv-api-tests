@@ -5393,7 +5393,7 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
 
     Covers MTV-777:
     - Set controller_max_vm_inflight to VM_INFLIGHT_LIMIT (1) and controller_max_populator_inflight to VM_POPULATOR_INFLIGHT_LIMIT (3)
-    - Migrate 3 VMs with 5 disks each (1 OS + 4 additional) from the same ESXi host
+    - Migrate 3 VMs with 4 disks each (1 OS + 3 additional) from the same ESXi host
     - Verify peak concurrent VMs per host respects VM_INFLIGHT_LIMIT (VM throttling)
     - Verify XCOPY was used and populator peak concurrency respected VM_POPULATOR_INFLIGHT_LIMIT
     - Restore both limits after the class completes

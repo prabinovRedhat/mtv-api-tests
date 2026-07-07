@@ -894,6 +894,7 @@ tests_params: dict = {
 | `xfs_compatibility`   | No       | True to enable XFS v4 filesystem compatibility        |
 | `migrate_shared_disks`| No       | True to enable shared disk migration at plan level    |
 | `inventory_timeout`   | No       | Per-VM Forklift inventory wait timeout, in seconds    |
+| `clone_to_same_host`  | No       | True to pin all cloned VMs to the same ESXi host      |
 
 **Test Verification Configuration:**
 

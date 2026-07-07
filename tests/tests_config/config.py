@@ -398,6 +398,7 @@ tests_params: dict = {
         ],
         "warm_migration": False,
         "copyoffload": True,
+        "clone_to_same_host": True,  # Forces VM2+ to the same ESXi host as VM1 for per-host inflight throttling
     },
     "test_copyoffload_large_vm_migration": {
         "virtual_machines": [

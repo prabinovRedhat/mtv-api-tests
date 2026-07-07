@@ -5392,6 +5392,10 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
     - Verify peak concurrent VMs per host respects VM_INFLIGHT_LIMIT (VM throttling)
     - Verify XCOPY was used and populator peak concurrency respected VM_POPULATOR_INFLIGHT_LIMIT
     - Restore both limits after the class completes
+
+    Note: Requires both VMs to clone to the same ESXi host.
+    Set 'copyoffload.esxi_host' in providers.json to the target ESXi host FQDN/IP
+    that maps to the same vCenter-registered host for both clones.
     """
 
     storage_map: StorageMap

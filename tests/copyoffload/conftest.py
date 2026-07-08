@@ -230,7 +230,6 @@ def populator_inflight_forkliftcontroller(
 
 @pytest.fixture(scope="class")
 def vm_populator_inflight_forkliftcontroller(
-    prepared_plan: dict[str, Any],
     ocp_admin_client: "DynamicClient",
     mtv_namespace: str,
 ) -> Generator[None, None, None]:
@@ -242,14 +241,10 @@ def vm_populator_inflight_forkliftcontroller(
     serializes all ForkliftController changes across pytest-xdist workers for
     the entire class duration to prevent partial-patch races.
 
-    Depends on prepared_plan to ensure VM cloning and inventory sync complete
-    before ForkliftController rollout, avoiding inventory disruption during setup.
-
     This fixture mutates cluster-wide MTV settings. Do not run multiple
     vm_populator throttling test classes against the same cluster in parallel.
 
     Args:
-        prepared_plan (dict[str, Any]): Processed test plan with cloned VMs and inventory.
         ocp_admin_client (DynamicClient): OpenShift admin client.
         mtv_namespace (str): Namespace where ForkliftController is installed.
 

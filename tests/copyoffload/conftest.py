@@ -169,6 +169,7 @@ def multi_datastore_config(source_provider_data: dict[str, Any]) -> None:
 
 @pytest.fixture(scope="class")
 def populator_inflight_forkliftcontroller(
+    prepared_plan: dict[str, Any],
     ocp_admin_client: "DynamicClient",
     mtv_namespace: str,
 ) -> Generator[None, None, None]:
@@ -179,10 +180,14 @@ def populator_inflight_forkliftcontroller(
     serializes ForkliftController changes across pytest-xdist workers for the entire class
     duration (setup through check_vms), including migration and post-migration verification.
 
+    Depends on prepared_plan to ensure VM cloning and inventory sync complete
+    before ForkliftController rollout, avoiding inventory disruption during setup.
+
     This fixture mutates cluster-wide MTV populator settings. Do not run multiple populator
     throttling test classes against the same cluster in parallel.
 
     Args:
+        prepared_plan (dict[str, Any]): Processed test plan with cloned VMs and inventory.
         ocp_admin_client (DynamicClient): OpenShift admin client.
         mtv_namespace (str): Namespace where ForkliftController is installed.
 

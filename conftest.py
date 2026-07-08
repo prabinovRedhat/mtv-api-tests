@@ -45,6 +45,7 @@ from utilities.copyoffload_constants import FORKLIFT_CONTROLLER_NAME
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import (
     ForkliftInventory,
+    VsphereForkliftInventory,
     create_forklift_inventory,
 )
 from libs.providers.openshift import OCPProvider
@@ -1105,6 +1106,13 @@ def prepared_plan(
         original_source_vm_names: list[str] = [vm["name"] for vm in virtual_machines] if has_shared_disk_config else []
         cloned_vm_objects: list[Any] = []
         first_vm_esxi_host: str | None = None
+        inventory_timeout = plan.get("inventory_timeout", 300)
+
+        # For vSphere providers, wait for host inventory before VM validation.
+        # Fresh vSphere providers report Ready while GET /hosts returns empty, causing VM validation failures.
+        if source_provider.type == Provider.ProviderType.VSPHERE:
+            if isinstance(source_provider_inventory, VsphereForkliftInventory):
+                source_provider_inventory.wait_for_hosts(timeout=inventory_timeout)
 
         for vm in virtual_machines:
             clone_options = {**vm, "enable_ctk": warm_migration}
@@ -1163,7 +1171,7 @@ def prepared_plan(
             # This is needed for external providers that Forklift needs to sync from
             # OVA is excluded because it doesn't clone VMs (uses pre-existing files)
             if source_provider.type != Provider.ProviderType.OVA:
-                source_provider_inventory.wait_for_vm(name=vm["name"], timeout=plan.get("inventory_timeout", 300))
+                source_provider_inventory.wait_for_vm(name=vm["name"], timeout=inventory_timeout)
 
             provider_vm_api = source_vm_details["provider_vm_api"]
 

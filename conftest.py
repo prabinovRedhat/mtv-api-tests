@@ -1001,6 +1001,7 @@ def prepared_plan(
     function-scoped `plan` fixture but at class scope. It prepares VMs
     once per test class rather than once per test function.
 
+
     Cloning uses a two-phase pattern: all VMs are cloned first, then Forklift
     inventory sync is waited on for every cloned VM. vSphere inventory sync
     workarounds (MTV-6066) are gated by MTV-6072 via jira_issue_scope_session: active
@@ -1105,7 +1106,6 @@ def prepared_plan(
 
         original_source_vm_names: list[str] = [vm["name"] for vm in virtual_machines] if has_shared_disk_config else []
         cloned_vm_objects: list[Any] = []
-        cloned_vm_names: list[str] = []
         first_vm_esxi_host: str | None = None
 
         for vm in virtual_machines:
@@ -1160,7 +1160,12 @@ def prepared_plan(
                 clone_options=vm,
             )
             vm["name"] = source_vm_details["name"]
-            cloned_vm_names.append(vm["name"])
+
+            # Wait for cloned VM to appear in Forklift inventory before proceeding
+            # This is needed for external providers that Forklift needs to sync from
+            # OVA is excluded because it doesn't clone VMs (uses pre-existing files)
+            if source_provider.type != Provider.ProviderType.OVA:
+                source_provider_inventory.wait_for_vm(name=vm["name"], timeout=plan.get("inventory_timeout", 300))
 
             provider_vm_api = source_vm_details["provider_vm_api"]
 

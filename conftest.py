@@ -803,6 +803,7 @@ def vcenter_clone_provider(
         username=clone_provider_data["username"],
         password=clone_provider_data["password"],
         fixture_store=fixture_store,
+        copyoffload=source_provider_data.get("copyoffload", {}),
     )
     provider.connect()
     try:

@@ -18,11 +18,12 @@ def mock_vsphere_inventory():
 
 def test_hosts_property(mock_vsphere_inventory):
     """Test hosts property calls correct API endpoint."""
+    mock_vsphere_inventory.provider_url_path = "vsphere/test-provider-id"
     mock_vsphere_inventory._request = Mock(return_value=[{"id": "host1", "name": "test-host"}])
 
     hosts = mock_vsphere_inventory.hosts
 
-    mock_vsphere_inventory._request.assert_called_once_with(url_path="vsphere/None/hosts")
+    mock_vsphere_inventory._request.assert_called_once_with(url_path="vsphere/test-provider-id/hosts")
     assert hosts == [{"id": "host1", "name": "test-host"}]
 
 

@@ -578,11 +578,17 @@ troubleshooting, see:
 
 📖 **[Copy-Offload Testing Guide](guides/copyoffload/how-to-run-copyoffload-tests.md)**
 
-> **Note:** `TestCopyoffloadPopulatorThrottlingMigration` (MTV-696) mutates cluster-wide
-> `ForkliftController` populator settings. Do not run it in parallel with other copy-offload tests on the
-> same cluster — the test temporarily sets `controller_max_populator_inflight` (and the populator
-> deployment `MAX_POPULATOR_INFLIGHT` env) to **2**, which caps in-flight populate pods cluster-wide for
-> every other migration running at the same time.
+> **Note:** These copy-offload classes mutate cluster-wide `ForkliftController` settings and must not
+> run in parallel with each other or with other conflicting copy-offload tests on the same cluster:
+>
+> - `TestCopyoffloadPopulatorThrottlingMigration` (MTV-696) — sets `controller_max_populator_inflight`
+>   (and populator deployment `MAX_POPULATOR_INFLIGHT`) to **2**
+> - `TestCopyoffloadVmPopulatorThrottlingMigration` (MTV-777) — sets `controller_max_vm_inflight` to
+>   **1** and `controller_max_populator_inflight` to **2**
+> - `TestCopyoffloadVmInflightObserveMigration` — sets `controller_max_vm_inflight` to **3** only
+>   (does not patch the populator limit)
+>
+> These caps apply cluster-wide for every other migration running at the same time.
 
 For array-specific Secret keys not covered by built-in vendor fields, use `storage_secret_extra` in the
 `copyoffload` section of `.providers.json` (or `COPYOFFLOAD_STORAGE_SECRET_EXTRA`); see the guide.

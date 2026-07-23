@@ -18,6 +18,7 @@ from utilities.copyoffload_constants import (
     POPULATOR_INFLIGHT_LIMIT,
     SUPPORTED_VENDORS,
     VM_INFLIGHT_LIMIT,
+    VM_INFLIGHT_OBSERVE_LIMIT,
     VM_POPULATOR_INFLIGHT_LIMIT,
 )
 from utilities.copyoffload_migration import (
@@ -296,6 +297,69 @@ def vm_populator_inflight_forkliftcontroller(
             f"Timeout ({POPULATOR_INFLIGHT_LOCK_TIMEOUT}s) waiting for ForkliftController "
             f"vm-populator-inflight lock at {lock_path}. "
             "Another worker may be running the VM+populator throttling test."
+        ) from err
+
+
+@pytest.fixture(scope="class")
+def vm_inflight_forkliftcontroller(
+    ocp_admin_client: "DynamicClient",
+    mtv_namespace: str,
+) -> Generator[None, None, None]:
+    """Set ForkliftController VM in-flight limit for the test class and restore after.
+
+    Patches only controller_max_vm_inflight to VM_INFLIGHT_OBSERVE_LIMIT (3).
+    Does not touch controller_max_populator_inflight. A file lock serializes
+    ForkliftController changes across pytest-xdist workers for the entire class
+    duration (setup through check_vms).
+
+    This fixture mutates cluster-wide MTV VM inflight settings. Do not run multiple
+    ForkliftController inflight test classes against the same cluster in parallel.
+
+    Args:
+        ocp_admin_client (DynamicClient): OpenShift admin client.
+        mtv_namespace (str): Namespace where ForkliftController is installed.
+
+    Yields:
+        None
+
+    Raises:
+        ValueError: If MAX_VM_INFLIGHT is not set on the forklift-controller deployment.
+        TimeoutError: If the cross-worker file lock cannot be acquired within
+            POPULATOR_INFLIGHT_LOCK_TIMEOUT seconds.
+    """
+    lock_path = get_forkliftcontroller_vm_populator_inflight_lock_path()
+    try:
+        with filelock.FileLock(lock_path, timeout=POPULATOR_INFLIGHT_LOCK_TIMEOUT):
+            forklift_controller = ForkliftController(
+                client=ocp_admin_client,
+                name=FORKLIFT_CONTROLLER_NAME,
+                namespace=mtv_namespace,
+                ensure_exists=True,
+            )
+            forklift_controller.wait_for_condition(
+                status=forklift_controller.Condition.Status.TRUE,
+                condition=forklift_controller.Condition.Type.RUNNING,
+                timeout=FORKLIFT_CONTROLLER_CONDITION_TIMEOUT,
+            )
+
+            original_vm_limit = get_deployment_vm_inflight_limit(
+                ocp_admin_client=ocp_admin_client,
+                mtv_namespace=mtv_namespace,
+            )
+
+            with vm_inflight_limit(
+                forklift_controller=forklift_controller,
+                ocp_admin_client=ocp_admin_client,
+                mtv_namespace=mtv_namespace,
+                test_limit=VM_INFLIGHT_OBSERVE_LIMIT,
+                original_deployment_limit=original_vm_limit,
+            ):
+                yield
+    except filelock.Timeout as err:
+        raise TimeoutError(
+            f"Timeout ({POPULATOR_INFLIGHT_LOCK_TIMEOUT}s) waiting for ForkliftController "
+            f"vm-inflight lock at {lock_path}. "
+            "Another worker may be running a ForkliftController inflight test."
         ) from err
 
 

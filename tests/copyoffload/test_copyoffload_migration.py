@@ -32,7 +32,13 @@ from exceptions.exceptions import MigrationPlanExecError
 from libs.base_provider import BaseProvider
 from libs.forklift_inventory import ForkliftInventory
 from libs.providers.openshift import OCPProvider
-from utilities.copyoffload_constants import POPULATOR_INFLIGHT_LIMIT, VM_INFLIGHT_LIMIT, VM_POPULATOR_INFLIGHT_LIMIT
+from utilities.copyoffload_constants import (
+    POPULATOR_INFLIGHT_LIMIT,
+    POPULATOR_INFLIGHT_OBSERVE_NO_LIMIT,
+    VM_INFLIGHT_LIMIT,
+    VM_INFLIGHT_OBSERVE_LIMIT,
+    VM_POPULATOR_INFLIGHT_LIMIT,
+)
 from utilities.copyoffload_migration import (
     create_log_capture_callback,
     execute_copyoffload_migration,
@@ -5609,6 +5615,258 @@ class TestCopyoffloadVmPopulatorThrottlingMigration:
             max_populator_inflight=VM_POPULATOR_INFLIGHT_LIMIT,
             min_expected_throttled=min_expected_throttled,
         )
+
+    def test_check_xcopy_used(
+        self,
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+        fixture_store: dict[str, Any],
+    ) -> None:
+        """Verify XCOPY acceleration was used for all disks.
+
+        Args:
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where populate pods exist.
+            fixture_store (dict[str, Any]): Fixture store containing cached populate pod logs.
+        """
+        verify_xcopy_used(
+            ocp_admin_client=ocp_admin_client,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            expected_xcopy_used=True,
+            fixture_store=fixture_store,
+        )
+
+    def test_check_vms(
+        self,
+        prepared_plan: dict[str, Any],
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_data: dict[str, Any],
+        source_vms_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+        vm_ssh_connections: SSHConnectionManager | None,
+    ) -> None:
+        """Validate migrated VMs.
+
+        Args:
+            prepared_plan (dict[str, Any]): Prepared plan configuration.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (OCPProvider): Destination provider instance.
+            source_provider_data (dict[str, Any]): Source provider configuration data.
+            source_vms_namespace (str): Namespace of the source VMs.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            vm_ssh_connections (SSHConnectionManager | None): SSH connection manager.
+        """
+        check_vms(
+            plan=prepared_plan,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            network_map_resource=self.network_map,
+            storage_map_resource=self.storage_map,
+            source_provider_data=source_provider_data,
+            source_vms_namespace=source_vms_namespace,
+            source_provider_inventory=source_provider_inventory,
+            vm_ssh_connections=vm_ssh_connections,
+        )
+
+
+@pytest.mark.vsphere
+@pytest.mark.copyoffload
+@pytest.mark.incremental
+@pytest.mark.parametrize(
+    "class_plan_config",
+    [pytest.param(py_config["tests_params"]["test_copyoffload_vm_inflight_observe_migration"])],
+    indirect=True,
+    ids=["copyoffload-vm-inflight-observe-maxvm3"],
+)
+@pytest.mark.usefixtures(
+    "vmware_cloud_init_ready",
+    "multus_network_name",
+    "copyoffload_config",
+    "vm_inflight_forkliftcontroller",
+    "copyoffload_ssh_key",
+    "cleanup_migrated_vms",
+)
+class TestCopyoffloadVmInflightObserveMigration:
+    """Observation-oriented copy-offload migration under maxVm=3 with mixed disk counts.
+
+    Patches only controller_max_vm_inflight to VM_INFLIGHT_OBSERVE_LIMIT (3); does not
+    patch the populator inflight controller setting. Migrates 2 VMs on the same ESXi
+    host (3 disks and 6 disks) while logging concurrent VMs and populate pods per host
+    for Jenkins diagnosis. No peak/throttling assertions — only check_xcopy_used and
+    check_vms after migrate.
+
+    Note:
+        Requires all VMs on the same ESXi host. Plan config uses
+        ``clone_to_same_host`` and ``disable_drs_for_vms`` so clones land on and
+        stay on VM1's host.
+    """
+
+    storage_map: StorageMap
+    network_map: NetworkMap
+    plan_resource: Plan
+
+    def test_create_storagemap(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        source_provider_data: dict[str, Any],
+        copyoffload_storage_secret: Secret,
+    ) -> None:
+        """Create StorageMap with copy-offload configuration.
+
+        Args:
+            prepared_plan (dict[str, Any]): Prepared plan configuration with VM names.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (OCPProvider): Destination provider instance.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            target_namespace (str): Target namespace for the StorageMap.
+            source_provider_data (dict[str, Any]): Source provider configuration data.
+            copyoffload_storage_secret (Secret): Copy-offload storage credentials secret.
+        """
+        copyoffload_config_data = source_provider_data["copyoffload"]
+        storage_vendor_product = copyoffload_config_data["storage_vendor_product"]
+        datastore_id = copyoffload_config_data["datastore_id"]
+        storage_class = py_config["storage_class"]
+        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+        offload_plugin_config = {
+            "vsphereXcopyConfig": {
+                "secretRef": copyoffload_storage_secret.name,
+                "storageVendorProduct": storage_vendor_product,
+            }
+        }
+        self.__class__.storage_map = get_storage_migration_map(
+            fixture_store=fixture_store,
+            target_namespace=target_namespace,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            ocp_admin_client=ocp_admin_client,
+            source_provider_inventory=source_provider_inventory,
+            vms=vms_names,
+            storage_class=storage_class,
+            datastore_id=datastore_id,
+            offload_plugin_config=offload_plugin_config,
+            volume_mode="Block",
+        )
+        assert self.storage_map, "StorageMap creation failed"
+
+    def test_create_networkmap(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        source_provider_inventory: ForkliftInventory,
+        target_namespace: str,
+        multus_network_name: dict[str, str],
+    ) -> None:
+        """Create NetworkMap resource.
+
+        Args:
+            prepared_plan (dict[str, Any]): Prepared plan configuration with VM names.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (OCPProvider): Destination provider instance.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+            target_namespace (str): Target namespace for the NetworkMap.
+            multus_network_name (dict[str, str]): Multus network name mapping.
+        """
+        vms_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+        self.__class__.network_map = get_network_migration_map(
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            source_provider_inventory=source_provider_inventory,
+            ocp_admin_client=ocp_admin_client,
+            multus_network_name=multus_network_name,
+            target_namespace=target_namespace,
+            vms=vms_names,
+        )
+        assert self.network_map, "NetworkMap creation failed"
+
+    def test_create_plan(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        source_provider: BaseProvider,
+        destination_provider: OCPProvider,
+        target_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+    ) -> None:
+        """Create MTV Plan CR resource.
+
+        Args:
+            prepared_plan (dict[str, Any]): Prepared plan configuration with VM names.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            source_provider (BaseProvider): Source provider instance.
+            destination_provider (OCPProvider): Destination provider instance.
+            target_namespace (str): Target namespace for the Plan.
+            source_provider_inventory (ForkliftInventory): Source provider inventory.
+        """
+        for vm in prepared_plan["virtual_machines"]:
+            vm_data = source_provider_inventory.get_vm(vm["name"])
+            vm["id"] = vm_data["id"]
+        self.__class__.plan_resource = create_plan_resource(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            source_provider=source_provider,
+            destination_provider=destination_provider,
+            storage_map=self.storage_map,
+            network_map=self.network_map,
+            virtual_machines_list=prepared_plan["virtual_machines"],
+            target_namespace=target_namespace,
+            warm_migration=prepared_plan.get("warm_migration", False),
+            copyoffload=prepared_plan.get("copyoffload", False),
+        )
+        assert self.plan_resource, "Plan creation failed"
+
+    def test_migrate_vms(
+        self,
+        prepared_plan: dict[str, Any],
+        fixture_store: dict[str, Any],
+        ocp_admin_client: DynamicClient,
+        target_namespace: str,
+        source_provider_inventory: ForkliftInventory,
+    ) -> None:
+        """Execute migration while logging VM and populator concurrency per ESXi host.
+
+        Monitors both trackers for Jenkins diagnosis. max_populator_inflight is a
+        high sentinel for the warn threshold only — the populator controller limit
+        is not patched by this test.
+
+        Args:
+            prepared_plan (dict[str, Any]): Prepared plan configuration with VM names.
+            fixture_store (dict[str, Any]): Fixture store for resource tracking and log caching.
+            ocp_admin_client (DynamicClient): OpenShift admin client.
+            target_namespace (str): Namespace where the Migration CR is created.
+            source_provider_inventory (ForkliftInventory): Inventory API for ESXi host lookup.
+        """
+        vm_names = [vm["name"] for vm in prepared_plan["virtual_machines"]]
+        # Monitor-only: populator limit is not patched; high sentinel avoids false WARN logs.
+        vm_results, populator_results = execute_migration_monitoring_vm_and_populator_inflight(
+            ocp_admin_client=ocp_admin_client,
+            fixture_store=fixture_store,
+            plan=self.plan_resource,
+            target_namespace=target_namespace,
+            source_provider_inventory=source_provider_inventory,
+            vm_names=vm_names,
+            max_vm_inflight=VM_INFLIGHT_OBSERVE_LIMIT,
+            max_populator_inflight=POPULATOR_INFLIGHT_OBSERVE_NO_LIMIT,
+        )
+        LOGGER.info(f"Observed peak concurrent VMs by host: {vm_results}")
+        LOGGER.info(f"Observed peak concurrent populate pods by host: {populator_results}")
 
     def test_check_xcopy_used(
         self,

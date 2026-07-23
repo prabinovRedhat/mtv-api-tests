@@ -26,6 +26,11 @@ VM_INFLIGHT_LIMIT = 1
 # Intentionally distinct from POPULATOR_INFLIGHT_LIMIT (2) used by MTV-696 with a single VM.
 VM_POPULATOR_INFLIGHT_LIMIT = 2
 
+# Observation / exploratory: patch controller_max_vm_inflight only (no populator limit patch)
+VM_INFLIGHT_OBSERVE_LIMIT = 3
+# Monitor-only warn threshold for populator tracker; does not patch the controller.
+POPULATOR_INFLIGHT_OBSERVE_NO_LIMIT = 10_000
+
 SOURCE_HOST_LABEL = "sourceHost"
 POPULATOR_THROTTLED_EVENT_REASON = "PopulatorThrottled"
 FORKLIFT_CONTROLLER_NAME = "forklift-controller"

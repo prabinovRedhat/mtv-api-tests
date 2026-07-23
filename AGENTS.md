@@ -831,6 +831,10 @@ class TestNameHere:
   pods). With sequential VMs (`VM_INFLIGHT_LIMIT=1`), pass `min_expected_throttled` to
   `verify_populator_throttling()` as `vm_count * max(0, disks_per_vm - limit)` instead of the default
   `pod_count - limit`. Requires the `vm_populator_inflight_forkliftcontroller` fixture.
+- **6-step copy-offload VM inflight observation pattern**: storagemap -> networkmap -> plan -> migrate ->
+  check_xcopy_used -> check_vms. Patches only `controller_max_vm_inflight`
+  (`vm_inflight_forkliftcontroller` / `VM_INFLIGHT_OBSERVE_LIMIT`); logs VM and populator concurrency
+  peaks during migrate with no throttling assertions. Requires the `vm_inflight_forkliftcontroller` fixture.
 - **6-step LUKS pattern**: storagemap -> networkmap -> plan -> migrate -> verify_luks_encryption -> check_vms
   `test_verify_luks_encryption` calls `verify_luks_encryption()` from `utilities/post_migration.py`. LUKS
   secret setup is handled by the `luks_vm_specs` fixture in `tests/luks/conftest.py`, which resolves
